@@ -1,0 +1,194 @@
+:root{
+  --gold: #ffd700;
+  --bg1: #030303; /* Глубокий черный фон */
+  --bg2: #050505;
+  --panel: #0a0a0a;
+  --border: #007700; /* Темно-зеленый (основная рамка) */
+  --terminal-green: #00ff41; /* Яркий неоново-зеленый (основной текст) */
+  --terminal-shadow: rgba(0, 255, 65, 0.4); 
+}
+
+/* --- АНИМАЦИИ СВЕЧЕНИЯ --- */
+/* Оранжевое свечение для цены */
+@keyframes neonOrangePulse{ 0%,100%{ text-shadow: 0 0 10px rgba(255, 140, 0, 0.6), 0 0 20px rgba(255, 140, 0, 0.3); } 50%{ text-shadow: 0 0 15px rgba(255, 140, 0, 0.9), 0 0 25px rgba(255, 140, 0, 0.5); } }
+/* Голубое свечение (Слабая) - s1 */
+@keyframes neonBluePulse{ 0%,100%{ box-shadow: 0 0 8px rgba(0, 191, 255, 0.3); } 50%{ box-shadow: 0 0 12px rgba(0, 191, 255, 0.6); } }
+/* Желтое свечение (Средняя) - s2 */
+@keyframes neonYellowPulse{ 0%,100%{ box-shadow: 0 0 8px rgba(255, 255, 0, 0.3); } 50%{ box-shadow: 0 0 12px rgba(255, 255, 0, 0.6); } }
+/* Красное свечение (Сильная) - s3 */
+@keyframes neonRedPulse{ 0%,100%{ box-shadow: 0 0 8px rgba(255, 0, 0, 0.3); } 50%{ box-shadow: 0 0 12px rgba(255, 0, 0, 0.6); } }
+/* Золотое свечение (для логотипа) */
+@keyframes neonPulse{ 0%,100%{ filter: drop-shadow(0 0 10px rgba(255,215,0,.45)) drop-shadow(0 0 25px rgba(255,215,0,.25)); } 50%{ filter: drop-shadow(0 0 14px rgba(255,215,0,.7)) drop-shadow(0 0 30px rgba(255,215,0,.35)); } }
+@keyframes textGlow{ 0%,100%{ text-shadow: 0 0 12px rgba(255,215,0,.25), 0 0 30px rgba(255,215,0,.15);} 50%{ text-shadow: 0 0 16px rgba(255,215,0,.45), 0 0 36px rgba(255,215,0,.25);} }
+
+/* --- ОСНОВНЫЕ СТИЛИ --- */
+.bg-komar{
+  background-color: var(--bg1);
+  color: var(--terminal-green); /* Основной текст неоново-зеленый */
+  font-family: 'Consolas', 'Courier New', monospace; /* Моноширинный шрифт */
+}
+
+/* Делаем основные карточки более строгими и зелеными */
+.card{
+  background: var(--panel);
+  border: 1px solid var(--border); 
+  border-radius: 2px; /* Угловатость терминала */
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+}
+
+/* Стиль кнопки "Старт/Стоп" и "Настройки" */
+.btn{
+  background: var(--panel); 
+  border:1px solid var(--terminal-green); 
+  border-radius:2px; 
+  padding:.55rem .9rem;
+  transition:.18s; 
+  color: var(--terminal-green);
+  text-shadow: 0 0 5px rgba(0, 255, 65, 0.8); 
+}
+.btn:hover{ 
+    background:rgba(0, 255, 65, 0.15); 
+    box-shadow:0 0 8px rgba(0, 255, 65, 0.8); 
+}
+
+/* Переопределение цвета текста для гармонии */
+.text-gray-100 { color: var(--terminal-green); }
+.text-gray-400 { color: rgba(0, 255, 65, 0.6); } /* Приглушенный зеленый для меток */
+.link-muted { color: rgba(0, 255, 65, 0.8); } /* Статус - яркий зеленый */
+.th { color: var(--terminal-green); } /* Заголовки разделов */
+
+/* Стили заголовка (KOMAR) - оставляем неоновый золотой */
+.text-gold{ color: var(--gold); }
+.neon-text{ color: var(--gold); animation: textGlow 3s ease-in-out infinite; }
+.neon-logo{ animation: neonPulse 3s ease-in-out infinite; }
+
+
+.badge{ 
+    padding:.18rem .45rem; 
+    border:1px solid rgba(0, 255, 65, 0.3); 
+    border-radius:.3rem;
+    background: rgba(0, 0, 0, 0.4);
+}
+/* Переопределение для Лонг/Шорт */
+.text-green-400 { color: #00ff41; text-shadow: 0 0 3px rgba(0, 255, 65, 0.6); }
+.text-red-400 { color: #ff5555; text-shadow: 0 0 3px rgba(255, 85, 85, 0.6); }
+
+
+.kv{ font-variant-numeric: tabular-nums; }
+.score{ font-weight:700; padding:.1rem .45rem; border-radius:.3rem; border:1px solid var(--border); transition: all 0.3s ease; }
+
+/* --- УСЛОВНЫЕ СТИЛИ СВЕЧЕНИЯ --- */
+/* Слабая (Голубое свечение) */
+.score.s1{ 
+    color: #87cefa; 
+    border-color: #00bfff;
+    animation: neonBluePulse 2.5s ease-in-out infinite; 
+} 
+/* Средняя (Желтое свечение) */
+.score.s2{ 
+    color: #ffcc00; 
+    border-color: #ffff00;
+    animation: neonYellowPulse 2.5s ease-in-out infinite; 
+} 
+/* Сильная (Красное свечение) */
+.score.s3{ 
+    color: #ff5555; 
+    border-color: #ff0000;
+    animation: neonRedPulse 2.5s ease-in-out infinite; 
+} 
+/* Оранжевое свечение для цены (NEW) */
+.neon-price {
+    color: #FF8C00; 
+    font-weight: 700;
+    animation: neonOrangePulse 2.5s ease-in-out infinite;
+}
+
+.chip{border:1px solid var(--border); padding:.28rem .6rem; border-radius:.3rem; cursor:pointer}
+.chip.active{background:rgba(255,215,0,.15); border-color:rgba(255,215,0,.45)}
+
+
+/* Дополнительное улучшение разделителей */
+.kv .separator {
+    color: var(--terminal-green); 
+    margin: 0 6px; 
+}
+
+/* --- АДАПТИВНОСТЬ (МОБИЛЬНЫЕ УСТРОЙСТВА) --- */
+@media (max-width: 768px) {
+    /* Основное тело и контейнер */
+    body {
+        /* Запрещаем горизонтальный скролл */
+        overflow-x: hidden;
+    }
+    .mx-auto.max-w-5xl {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    /* Скрываем логотип и подзаголовок, чтобы освободить место */
+    header img {
+        width: 32px;
+        height: 32px;
+    }
+    header > div > .text-3xl {
+        font-size: 1.5rem; /* Уменьшаем KOMAR */
+    }
+    header > div > .text-sm {
+        display: none; /* Скрываем Smart Crypto Scanner */
+    }
+
+    /* Уменьшаем размер текста сигналов */
+    .text-sm {
+        font-size: 0.8rem !important;
+    }
+
+    /* Делаем колонки с сигналами одна под другой */
+    .grid-cols-1.lg\:grid-cols-2 {
+        grid-template-columns: 1fr;
+    }
+    
+    /* Заставляем все метрики помещаться в одну строку, если возможно */
+    .kv {
+        display: flex;
+        flex-wrap: wrap; /* Позволяем переносить, если не помещается */
+        gap: 6px;
+    }
+    .kv .separator {
+        color: rgba(0, 255, 65, 0.6);
+        margin: 0 2px;
+    }
+    
+    /* --- НОВОЕ: Адаптация блока настроек --- */
+    /* Убираем колонки внутри settings card и делаем их блочными */
+    /* Целевые классы: grid grid-cols-1 md:grid-cols-2 gap-4 */
+    .card .grid.md\:grid-cols-2,
+    .card .grid.md\:grid-cols-3,
+    .card .grid.lg\:grid-cols-3 {
+        display: block !important;
+        gap: 0;
+    }
+    
+    /* Добавляем отступы между блоками настроек, которые были колонками */
+    .card .grid.md\:grid-cols-2 > div,
+    .card .grid.md\:grid-cols-3 > div,
+    .card .grid.lg\:grid-cols-3 > div {
+        margin-bottom: 1rem;
+    }
+    
+    /* Стиль для инпутов, чтобы они занимали всю ширину */
+    .card input[type="number"],
+    .card input[type="text"] {
+        width: 100% !important;
+        box-sizing: border-box; /* Важно, чтобы паддинги не увеличивали ширину */
+    }
+    
+    /* Исправляем layout для выбора ТФ, чтобы чипы помещались */
+    .card .flex-wrap {
+        /* flex-wrap: wrap уже есть, но переопределяем gap для плотности */
+        gap: 4px; 
+    }
+    .chip {
+        padding: 0.2rem 0.5rem; /* Немного уменьшаем чипы */
+        font-size: 0.8rem;
+    }
+}
