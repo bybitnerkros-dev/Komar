@@ -1,16 +1,15 @@
 {
   "version": 2,
+  "functions": {
+    "api/*.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
   "builds": [
-    { "src": "api/*.js", "use": "@vercel/node" },
-    { "src": "*.html", "use": "@vercel/static" },
-    { "src": "*.css", "use": "@vercel/static" },
-    { "src": "*.json", "use": "@vercel/static" },
-    { "src": "*.svg", "use": "@vercel/static" },
-    { "src": "*.wav", "use": "@vercel/static" },
-    { "src": "js/*.js", "use": "@vercel/static" }
+    { "src": "api/*.js", "use": "@vercel/node" }
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/.*", "dest": "/index.html" }
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
