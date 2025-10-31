@@ -1,70 +1,65 @@
 // api/registerUser.js
-// Создание пользователя с сохранением в JSON
+// Create user in Supabase via serverless function
 
-const fs = require("fs");
-const path = require("path");
 const crypto = require("crypto");
 
-const usersFilePath = path.join(__dirname, "..", "users.json");
+// Import Supabase client for serverless environment
+const { createClient } = require("@supabase/supabase-js");
 
-// Хэш пароля
-function hashPassword(password) {
-  return crypto.createHash("sha256").update(password).digest("hex");
-}
+// Environment vars from Vercel
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-// Чтение базы
-function loadUsers() {
-  try {
-    const data = fs.readFileSync(usersFilePath, "utf8");
-    return JSON.parse(data);
-  } catch (err) {
-    return [];
-  }
-}
-
-// Запись базы
-function saveUsers(users) {
-  fs.writeFileSync(usersFilePath, JSON.stringify(users, null, 2));
+// Hash function
+function hashSHA256(text) {
+    return crypto.createHash("sha256").update(text).digest("hex");
 }
 
 module.exports = async (req, res) => {
-  if (req.method !== "POST") {
-    return res.status(405).json({ success: false, message: "POST only" });
-  }
+    if (req.method !== "POST") {
+        return res.status(405).json({ success: false, message: "Only POST allowed" });
+    }
 
-  let body = "";
-  await new Promise(resolve => {
-    req.on("data", chunk => body += chunk);
-    req.on("end", resolve);
-  });
+    const { username, password, secret } = req.body;
 
-  let data = {};
-  try {
-    data = JSON.parse(body);
-  } catch {
-    return res.status(400).json({ success: false, message: "Bad JSON" });
-  }
+    if (!username || !password || !secret) {
+        return res.status(400).json({ success: false, message: "Missing fields" });
+    }
 
-  const { username, password } = data;
+    // ✅ Реальный захэшированный секрет (тот же, что и в login.js)
+    const OWNER_SECRET_HASH = process.env.OWNER_SECRET_HASH;
 
-  if (!username || !password) {
-    return res.status(400).json({ success: false, message: "Missing username or password" });
-  }
+    if (!OWNER_SECRET_HASH) {
+        return res.status(500).json({ success: false, message: "Missing OWNER_SECRET_HASH env variable" });
+    }
 
-  let users = loadUsers();
+    const secretHash = hashSHA256(secret);
+    if (secretHash !== OWNER_SECRET_HASH) {
+        return res.status(403).json({ success: false, message: "Wrong secret word" });
+    }
 
-  // Проверяем, есть ли такой логин
-  if (users.find(u => u.username === username)) {
-    return res.status(409).json({ success: false, message: "Username already exists" });
-  }
+    const passwordHash = hashSHA256(password);
 
-  // Сохраняем
-  users.push({
-    username,
-    password: hashPassword(password)
-  });
+    // Проверяем, нет ли такого юзера
+    const { data: existing } = await supabase
+        .from("users")
+        .select("id")
+        .eq("username", username)
+        .maybeSingle();
 
-  saveUsers(users);
+    if (existing) {
+        return res.status(409).json({ success: false, message: "User already exists" });
+    }
 
-  return res.json({ success: true, message: "Account created" });
+    // Создаем юзера в Supabase
+    const { data, error } = await supabase
+        .from("users")
+        .insert([{ username, password_hash: passwordHash }])
+        .select();
+
+    if (error) {
+        console.error(error);
+        return res.status(500).json({ success: false, message: "DB error" });
+    }
+
+    return res.status(200).json({ success: true, message: "User registered", user: data });
 };
