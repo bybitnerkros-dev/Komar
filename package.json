@@ -1,7 +1,7 @@
 {
-  "name": "komar-app",
+  "name": "komar-auth",
   "version": "1.0.0",
   "dependencies": {
-    "@supabase/supabase-js": "^2.42.0"
+    "@supabase/supabase-js": "^2.39.6"
   }
 }
