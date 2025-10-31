@@ -1,20 +1,13 @@
-// api/registerUser.js
-// Create user in Supabase via serverless function
+import crypto from "crypto";
+import { createClient } from "@supabase/supabase-js";
 
-const crypto = require("crypto");
-
-// Import Supabase client for serverless environment
-const { createClient } = require("@supabase/supabase-js");
-
-// Environment vars from Vercel
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-// Hash function
 function hashSHA256(text) {
     return crypto.createHash("sha256").update(text).digest("hex");
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
     if (req.method !== "POST") {
         return res.status(405).json({ success: false, message: "Only POST allowed" });
     }
@@ -25,7 +18,6 @@ module.exports = async (req, res) => {
         return res.status(400).json({ success: false, message: "Missing fields" });
     }
 
-    // ✅ Реальный захэшированный секрет (тот же, что и в login.js)
     const OWNER_SECRET_HASH = process.env.OWNER_SECRET_HASH;
 
     if (!OWNER_SECRET_HASH) {
@@ -39,7 +31,6 @@ module.exports = async (req, res) => {
 
     const passwordHash = hashSHA256(password);
 
-    // Проверяем, нет ли такого юзера
     const { data: existing } = await supabase
         .from("users")
         .select("id")
@@ -50,7 +41,6 @@ module.exports = async (req, res) => {
         return res.status(409).json({ success: false, message: "User already exists" });
     }
 
-    // Создаем юзера в Supabase
     const { data, error } = await supabase
         .from("users")
         .insert([{ username, password_hash: passwordHash }])
@@ -61,5 +51,5 @@ module.exports = async (req, res) => {
         return res.status(500).json({ success: false, message: "DB error" });
     }
 
-    return res.status(200).json({ success: true, message: "User registered", user: data });
-};
+    return res.status(200).json({ success: true, user: data });
+}
