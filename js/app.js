@@ -77,8 +77,8 @@ const bosPresets = [
 // NEW: Расширенные пресеты для дивергенции
 const divPresets = [
   { name: 'early', label: '🟢 Ранний дивер', color: '#00ff41', rsiPeriod: 9, rsiDiffMin: 3, maxRsiDiff: 15, rsiPeriodCompare: 5, useMacd: false },
-  { name: 'mid', label: '🟠 Средний дивер', color: '#ffd700', rsiPeriod: 9, rsiDiffMin: 4, maxRsiDiff: 20, rsiPeriodCompare: 10, useMacd: true },
-  { name: 'strong', label: '🔴 Настоящий дивер', color: '#ff5555', rsiPeriod: 14, rsiDiffMin: 6, maxRsiDiff: 25, rsiPeriodCompare: 15, useMacd: true }
+  { name: 'mid', label: '🟠 Средний дивер', color: '#ffd700', rsiPeriod: 14, rsiDiffMin: 5, maxRsiDiff: 20, rsiPeriodCompare: 10, useMacd: true, macdFast: 12, macdSlow: 26, macdSignal: 9, macdMinDiff: 0.0002, macdComparePeriod: 15, minCVDConfirmUsd: 0, minOIConfirmPct: 0 }, // Обновлены MACD и фильтры по умолчанию
+  { name: 'strong', label: '🔴 Настоящий дивер', color: '#ff5555', rsiPeriod: 21, rsiDiffMin: 8, maxRsiDiff: 30, rsiPeriodCompare: 15, useMacd: true, macdFast: 12, macdSlow: 26, macdSignal: 9, macdMinDiff: 0.0005, macdComparePeriod: 20, minCVDConfirmUsd: 0, minOIConfirmPct: 0 } // Обновлены MACD и фильтры по умолчанию
 ];
 
 // --- Utility function to get preset values ---
@@ -114,14 +114,14 @@ function getPresetValues(moduleKey, name){
                 maxRsiDiff: p.maxRsiDiff,
                 rsiPeriodCompare: p.rsiPeriodCompare,
                 useMacd: p.useMacd,
-                macdFast: 12,
-                macdSlow: 26,
-                macdSignal: 9,
-                macdMinDiff: 0.0001,
-                macdComparePeriod: 10,
+                macdFast: p.macdFast !== undefined ? p.macdFast : 12, // Используем значение из пресета, если есть
+                macdSlow: p.macdSlow !== undefined ? p.macdSlow : 26,
+                macdSignal: p.macdSignal !== undefined ? p.macdSignal : 9,
+                macdMinDiff: p.macdMinDiff !== undefined ? p.macdMinDiff : 0.0001,
+                macdComparePeriod: p.macdComparePeriod !== undefined ? p.macdComparePeriod : 10,
                 // New CVD/OI confirm filters default to zero for presets
-                minCVDConfirmUsd: 0,
-                minOIConfirmPct: 0,
+                minCVDConfirmUsd: p.minCVDConfirmUsd !== undefined ? p.minCVDConfirmUsd : 0,
+                minOIConfirmPct: p.minOIConfirmPct !== undefined ? p.minOIConfirmPct : 0,
             };
         }
         return null;
@@ -197,7 +197,7 @@ function DivergenceSettingsPanel({
     
     // Function to check presets after a change in key parameters (RSI Period or Min Diff)
     const checkPresetOnChange = () => {
-        // We only check the primary RSI parameters to switch from standard to 'custom'
+        // Мы используем только rsiPeriod и rsiDiffMin для проверки, так как это ключевые параметры RSI.
         checkAndApplyPreset('div', divRsiPeriod, divRsiDiffMin);
     };
 
@@ -310,6 +310,7 @@ function App(){
 
   // Divergence - Defaulting to the strict 1h settings
   const [divPreset, setDivPreset] = useState('custom');
+  // Установим значения по умолчанию (для "Строгий 1H" из logic.js, но по умолчанию "custom")
   const [divRsiPeriod, setDivRsiPeriod] = useState(30); 
   const [divRsiDiffMin, setDivRsiDiffMin] = useState(9.0);
   const [divMaxRsiDiff, setDivMaxRsiDiff] = useState(40);
@@ -458,7 +459,8 @@ function App(){
     else if(moduleKey==='bos'){ presets=bosPresets; setters=[setBosPreset, setBosPeriod, setBosVolumeMult, setBosEmaPeriod]; }
     else if(moduleKey==='div'){ 
         presets=divPresets; 
-        setters=[setDivPreset, setDivRsiPeriod, setDivRsiDiffMin, setDivMaxRsiDiff, setDivRsiPeriodCompare, setDivUseMacd, setDivMacdFast, setDivMacdSlow, setDivMacdSignal, setDivMacdMinDiff, setDivMacdComparePeriod]; 
+        // ВНИМАНИЕ: Сеттеры для div должны быть перечислены в порядке сохранения (v1, v2, v3...v12)
+        setters=[setDivPreset, setDivRsiPeriod, setDivRsiDiffMin, setDivMaxRsiDiff, setDivRsiPeriodCompare, setDivUseMacd, setDivMacdFast, setDivMacdSlow, setDivMacdSignal, setDivMacdMinDiff, setDivMacdComparePeriod, setDivMinCVDConfirmUsd, setDivMinOIConfirmPct]; 
     }
 
     // This logic only checks the primary two parameters (v1, v2) for simplicity
@@ -472,8 +474,23 @@ function App(){
       else if(moduleKey==='flow' && Number(v1) === vals.flowOIPct && Number(v2) === vals.flowCVDUsd){ match=true; }
       else if(moduleKey==='disbalance' && Number(v1) === vals.disbalanceOIPct && Number(v2) === vals.disbalanceCVDUsd){ match=true; }
       else if(moduleKey==='bos' && Number(v1) === vals.bosPeriod && Number(v2) === vals.bosVolumeMult && Number(v3) === vals.bosEmaPeriod){ match=true; }
-      // DIV Check: v1=rsiPeriod, v2=rsiDiffMin
-      else if(moduleKey==='div' && Number(v1) === vals.rsiPeriod && Number(v2) === vals.rsiDiffMin){ match=true; } 
+      // ИСПРАВЛЕНИЕ ДЛЯ DIV: Проверяем все параметры, если они совпадают, устанавливаем пресет
+      else if(moduleKey==='div' && 
+                Number(v1) === vals.rsiPeriod && 
+                Number(v2) === vals.rsiDiffMin &&
+                Number(divMaxRsiDiff) === vals.maxRsiDiff &&
+                Number(divRsiPeriodCompare) === vals.rsiPeriodCompare &&
+                !!divUseMacd === vals.useMacd &&
+                Number(divMacdFast) === vals.macdFast &&
+                Number(divMacdSlow) === vals.macdSlow &&
+                Number(divMacdSignal) === vals.macdSignal &&
+                Number(divMacdMinDiff) === vals.macdMinDiff &&
+                Number(divMacdComparePeriod) === vals.macdComparePeriod &&
+                Number(divMinCVDConfirmUsd) === vals.minCVDConfirmUsd &&
+                Number(divMinOIConfirmPct) === vals.minOIConfirmPct
+            ){ 
+                match=true; 
+            } 
       
       if(match){
         setters[0](p.name); // Set preset to standard name
@@ -489,7 +506,7 @@ function App(){
     if (moduleKey === 'pump') {
       setPumpCustom({ pumpMinOIPct, pumpMinCVDUsd }); 
     } else if (moduleKey === 'div') {
-      // NEW DIV SAVE: Сохраняем все 10 параметров дивергенции в custom state
+      // NEW DIV SAVE: Сохраняем все 12 параметров дивергенции в custom state
       setDivCustom({ 
         divRsiPeriod, divRsiDiffMin, divMaxRsiDiff, divRsiPeriodCompare,
         divUseMacd, divMacdFast, divMacdSlow, divMacdSignal, divMacdMinDiff, divMacdComparePeriod,
@@ -516,7 +533,7 @@ function App(){
       if(custom.divRsiPeriod!=null) setDivRsiPeriod(custom.divRsiPeriod);
       if(custom.divRsiDiffMin!=null) setDivRsiDiffMin(custom.divRsiDiffMin);
       
-      // NEW DIV LOAD: Загружаем все 10 параметров
+      // NEW DIV LOAD: Загружаем все 12 параметров
       if(custom.divMaxRsiDiff!=null) setDivMaxRsiDiff(custom.divMaxRsiDiff);
       if(custom.divRsiPeriodCompare!=null) setDivRsiPeriodCompare(custom.divRsiPeriodCompare);
       if(typeof custom.divUseMacd==='boolean') setDivUseMacd(custom.divUseMacd);
@@ -580,7 +597,7 @@ function App(){
       if(vals){
         setDivRsiPeriod(vals.rsiPeriod); 
         setDivRsiDiffMin(vals.rsiDiffMin);
-        // NEW DIV APPLY: Применяем все 10 параметров из пресета
+        // NEW DIV APPLY: Применяем все 12 параметров из пресета
         setDivMaxRsiDiff(vals.maxRsiDiff);
         setDivRsiPeriodCompare(vals.rsiPeriodCompare);
         setDivUseMacd(vals.useMacd);
@@ -589,9 +606,9 @@ function App(){
         setDivMacdSignal(vals.macdSignal);
         setDivMacdMinDiff(vals.macdMinDiff);
         setDivMacdComparePeriod(vals.macdComparePeriod);
-        // NEW CONFIRMATION FILTERS APPLY (defaults to 0 for presets)
-        setDivMinCVDConfirmUsd(vals.minCVDConfirmUsd || 0);
-        setDivMinOIConfirmPct(vals.minOIConfirmPct || 0);
+        // NEW CONFIRMATION FILTERS APPLY
+        setDivMinCVDConfirmUsd(vals.minCVDConfirmUsd);
+        setDivMinOIConfirmPct(vals.minOIConfirmPct);
       }
     }
     setStatus(`✅ Пресет диверов: ${name}`);
@@ -679,7 +696,7 @@ function App(){
   };
   const onStatus = (msg)=> setStatus(`${nowTime()} — ${msg}`);
 
-  // Start/Stop (Обновлено для Divergence: передаем все 10 параметров в logic.js)
+  // Start/Stop (Обновлено для Divergence: передаем все 12 параметров в logic.js)
   const handleStart = ()=>{
     if (!isAnyModuleActive) {
       setStatus(`⛔️ Ошибка: Выберите хотя бы один модуль.`);
@@ -715,7 +732,7 @@ function App(){
     Settings.sensitivity.pumpMinOIPct = Number(pumpMinOIPct)||0.05;
     Settings.sensitivity.pumpMinCVDUsd = Number(pumpMinCVDUsd)||500000;
 
-    // Divergence: PASS ALL 10 PARAMS
+    // Divergence: PASS ALL 12 PARAMS
     Settings.sensitivity.div = {
         rsiPeriod: Number(divRsiPeriod)||9,
         rsiDiffMin: Number(divRsiDiffMin)||4,
