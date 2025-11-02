@@ -8,7 +8,10 @@ const divPresets = {
         rsiDiffMin: 3, 
         maxRsiDiff: 15,
         rsiPeriodCompare: 5,
-        useMacd: false // MACD отключен для быстрых/ранних сигналов
+        useMacd: false, // MACD отключен для быстрых/ранних сигналов
+        macdFast: 12, macdSlow: 26, macdSignal: 9, macdDiffMin: 0.0001, macdComparePeriod: 10,
+        minCVDConfirmUsd: 0,  // Фильтры подтверждения по умолчанию
+        minOIConfirmPct: 0,
     },
     // Пресет "Средний дивер": Баланс между скоростью и надежностью
     'Средний дивер': {
@@ -16,7 +19,10 @@ const divPresets = {
         rsiDiffMin: 5, 
         maxRsiDiff: 20,
         rsiPeriodCompare: 10,
-        useMacd: true 
+        useMacd: true, 
+        macdFast: 12, macdSlow: 26, macdSignal: 9, macdDiffMin: 0.0002, macdComparePeriod: 15, // MACD чуть строже
+        minCVDConfirmUsd: 0,  // Фильтры подтверждения по умолчанию
+        minOIConfirmPct: 0,
     },
     // Пресет "Настоящий дивер": Медленный RSI, высокая мин. разница, высокая надежность
     'Настоящий дивер': {
@@ -24,8 +30,22 @@ const divPresets = {
         rsiDiffMin: 8, 
         maxRsiDiff: 30, // Выше max_di, чтобы пропустить экстремально сильные движения
         rsiPeriodCompare: 15,
-        useMacd: true 
-    }
+        useMacd: true, 
+        macdFast: 12, macdSlow: 26, macdSignal: 9, macdDiffMin: 0.0005, macdComparePeriod: 20, // MACD строгий
+        minCVDConfirmUsd: 0,  // Фильтры подтверждения по умолчанию
+        minOIConfirmPct: 0,
+    },
+    // Специальный пресет для ТФ 1 час (Максимально строгий)
+    'Строгий 1H': {
+        rsiPeriod: 30,
+        rsiDiffMin: 9.0,
+        maxRsiDiff: 40,
+        rsiPeriodCompare: 12,
+        useMacd: true,
+        macdFast: 12, macdSlow: 26, macdSignal: 9, macdDiffMin: 0.005, macdComparePeriod: 18,
+        minCVDConfirmUsd: 250000, // Высокий порог, чтобы убрать шум (только для этого пресета)
+        minOIConfirmPct: 0.05,
+    }
 };
 
 // ---- НАСТРОЙКИ ----
@@ -115,17 +135,8 @@ function setDivergenceSettings(type, customConfig = {}) {
         Settings.sensitivity.div.divergencePreset = 'Свои настройки';
     } else if (divPresets[type]) {
         // Применяем настройки пресета
+        // NEW: Применяем ВСЕ настройки из пресета, включая MACD и фильтры подтверждения
         Object.assign(Settings.sensitivity.div, divPresets[type]);
-        // MACD-настройки не включены в Presets по умолчанию, добавляем их, если не заданы
-        Settings.sensitivity.div.macdFast = Settings.sensitivity.div.macdFast || 12; 
-        Settings.sensitivity.div.macdSlow = Settings.sensitivity.div.macdSlow || 26; 
-        Settings.sensitivity.div.macdSignal = Settings.sensitivity.div.macdSignal || 9; 
-        Settings.sensitivity.div.macdDiffMin = Settings.sensitivity.div.macdDiffMin || 0.0001; 
-        Settings.sensitivity.div.macdComparePeriod = Settings.sensitivity.div.macdComparePeriod || 10;
-        // Устанавливаем фильтры подтверждения в 0 для стандартных пресетов
-        Settings.sensitivity.div.minCVDConfirmUsd = 0;
-        Settings.sensitivity.div.minOIConfirmPct = 0;
-
         Settings.sensitivity.div.divergencePreset = type;
     } else {
         console.error(`Неизвестный тип настроек дивергенции: ${type}`);
