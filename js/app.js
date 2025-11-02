@@ -84,7 +84,6 @@ const divPresets = [
 // --- Utility function to get preset values ---
 function getPresetValues(moduleKey, name){
     const nameStr = name || 'mid';
-    // ... (logic for pump, smartpump, flow, disbalance, bos remains the same) ...
     if(moduleKey==='pump') {
         const p = pumpPresets.find(x=>x.name===nameStr);
         return p ? { minOIPct: p.oi, minCVDUsd: p.cvd } : null;
@@ -107,21 +106,22 @@ function getPresetValues(moduleKey, name){
     }
     if(moduleKey==='div') {
         const p = divPresets.find(x=>x.name===nameStr);
-        // NEW: Возвращаем полный набор настроек для дивергенции
         if (p) {
-             // MACD настройки не хранятся в пресетах divPresets, 
-             // поэтому используем значения по умолчанию для MACD
+            // MACD settings default to standard if not defined in preset
             return { 
                 rsiPeriod: p.rsiPeriod, 
                 rsiDiffMin: p.rsiDiffMin,
-                maxRsiDiff: p.maxRsiDiff, // NEW
-                rsiPeriodCompare: p.rsiPeriodCompare, // NEW
-                useMacd: p.useMacd, // NEW
+                maxRsiDiff: p.maxRsiDiff,
+                rsiPeriodCompare: p.rsiPeriodCompare,
+                useMacd: p.useMacd,
                 macdFast: 12,
                 macdSlow: 26,
                 macdSignal: 9,
                 macdMinDiff: 0.0001,
                 macdComparePeriod: 10,
+                // New CVD/OI confirm filters default to zero for presets
+                minCVDConfirmUsd: 0,
+                minOIConfirmPct: 0,
             };
         }
         return null;
@@ -144,114 +144,134 @@ const signalDescriptions = {
 // DIVERGENCE SETTINGS COMPONENT (NEW)
 // ======================================
 
-function DivergenceSettingsPanel({ 
-    // RSI
-    divRsiPeriod, setDivRsiPeriod, divRsiDiffMin, setDivRsiDiffMin, 
-    // NEW DIVERGENCE PARAMS
-    divMaxRsiDiff, setDivMaxRsiDiff, divRsiPeriodCompare, setDivRsiPeriodCompare,
-    // MACD PARAMS
-    divUseMacd, setDivUseMacd, divMacdFast, setDivMacdFast, divMacdSlow, setDivMacdSlow, 
-    divMacdSignal, setDivMacdSignal, divMacdMinDiff, setDivMacdMinDiff, divMacdComparePeriod, setDivMacdComparePeriod,
-    checkAndApplyPreset
-}) {
-    // Вспомогательная функция для обновления состояния и проверки пресета
-    const handleUpdate = (setter, moduleKey, v1, v2, v3, v4, v5, v6) => (e) => {
-        setter(e.target.value);
-        // Поскольку MACD многопараметрен, здесь сложнее отследить пресет.
-        // Оставим проверку только для основных RSI параметров.
-        if (moduleKey === 'div') {
-            checkAndApplyPreset('div', v1, v2); 
-        }
-    };
-    
-    // Вспомогательная функция для генерации полей ввода
-    const InputField = ({ label, value, setter, infoText, step = 1, min = 1, type = 'number', id, checked, isMacdParam = false }) => {
-        const onChange = (e) => {
-            setter(e.target.value);
-            // Если это не MACD-параметр, запускаем полную проверку пресета при изменении
-            // MACD-параметры не влияют на "стандартные" пресеты RSI
-            if (!isMacdParam) {
-                checkAndApplyPreset('div', divRsiPeriod, divRsiDiffMin);
-            }
-        };
+function InputField({ label, value, setter, infoText, step = 1, min = 0, type = 'number', id, checked, isMacdParam = false, disabled = false }) {
+    const isCheckbox = type === 'checkbox';
 
-        const onCheckboxChange = (e) => {
-            setter(e.target.checked);
-        };
-
-        return (
-            <div>
-                <div className="th mb-1">
-                    {label}
-                    {infoText && <InfoTooltip text={infoText} />}
-                </div>
-                {type === 'checkbox' ? (
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={checked} onChange={onCheckboxChange} />
-                        {label}
-                    </label>
-                ) : (
-                    <input type={type} id={id} step={step} min={min}
-                           className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
-                           value={value}
-                           onChange={onChange} />
-                )}
-            </div>
-        );
+    const onChange = (e) => {
+        setter(isCheckbox ? e.target.checked : e.target.value);
     };
 
     return (
+        <div>
+            <div className="th mb-1">
+                {label}
+                {infoText && <InfoTooltip text={infoText} />}
+            </div>
+            {isCheckbox ? (
+                <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={checked} onChange={onChange} disabled={disabled} />
+                    {label}
+                </label>
+            ) : (
+                <input type={type} id={id} step={step} min={min}
+                    className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
+                    value={value}
+                    onChange={onChange}
+                    disabled={disabled} />
+            )}
+        </div>
+    );
+};
+
+
+function DivergenceSettingsPanel({ 
+    divPreset, applyDivPreset, divPresets,
+    // RSI Params
+    divRsiPeriod, setDivRsiPeriod, divRsiDiffMin, setDivRsiDiffMin, 
+    divMaxRsiDiff, setDivMaxRsiDiff, divRsiPeriodCompare, setDivRsiPeriodCompare,
+    // MACD Params
+    divUseMacd, setDivUseMacd, divMacdFast, setDivMacdFast, divMacdSlow, setDivMacdSlow, 
+    divMacdSignal, setDivMacdSignal, divMacdMinDiff, setDivMacdMinDiff, divMacdComparePeriod, setDivMacdComparePeriod,
+    // NEW CONFIRMATION FILTERS
+    divMinCVDConfirmUsd, setDivMinCVDConfirmUsd,
+    divMinOIConfirmPct, setDivMinOIConfirmPct,
+    checkAndApplyPreset, renderPresetChips
+}) {
+    const isCustom = divPreset === 'custom';
+
+    // Simplified handle update function focusing on setting state
+    const handleValueChange = (setter, newVal) => {
+        setter(newVal);
+        // Note: Preset check is handled separately to avoid complex parameter mapping here.
+    };
+    
+    // Function to check presets after a change in key parameters (RSI Period or Min Diff)
+    const checkPresetOnChange = () => {
+        // We only check the primary RSI parameters to switch from standard to 'custom'
+        checkAndApplyPreset('div', divRsiPeriod, divRsiDiffMin);
+    };
+
+
+    return (
         <div className="space-y-4">
-            <div className="label-heading">Настройки RSI и фильтры</div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {/* 1. RSI Period */}
-                <InputField label="RSI период" value={divRsiPeriod} setter={setDivRsiPeriod} 
-                            infoText="Период для расчета RSI (например, 9 или 14)." min="5" max="30" />
-                
-                {/* 2. Min RSI Diff */}
-                <InputField label="Миним. разница RSI" value={divRsiDiffMin} setter={setDivRsiDiffMin} 
-                            infoText="Минимальная разница между RSI(сейчас) и RSI(T-свечей назад), необходимая для сигнала." min="1" max="15" />
-                
-                {/* 3. Max RSI Diff (ВАШЕ MAX_DI) */}
-                <InputField label="Макс. разница RSI (max_di)" value={divMaxRsiDiff} setter={setDivMaxRsiDiff} 
-                            infoText="Максимально допустимая разница RSI. Используется как фильтр для отсеивания слишком сильных движений (если разница > max_di, сигнал игнорируется)." min="5" max="50" />
-                
-                {/* 4. Compare Period (T) */}
-                <InputField label="Период сравнения (T)" value={divRsiPeriodCompare} setter={setDivRsiPeriodCompare} 
-                            infoText="Количество свечей назад, с которыми сравнивается текущий RSI и цена." min="2" max="30" />
-            </div>
+            <div className="th mb-2">Пресет для диверов (RSI + MACD)</div>
+            {renderPresetChips(divPreset, applyDivPreset, divPresets)}
 
-            <div className="h-px bg-[#1b1f2a]" />
-
-            <div className="label-heading">Настройки MACD (Дополнительный фильтр)</div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {/* 5. Use MACD Checkbox */}
-                <div className="md:col-span-4">
-                    <InputField label="Использовать MACD-дивергенцию" type="checkbox" checked={divUseMacd} setter={setDivUseMacd} 
-                                infoText="Если включено, дивергенция будет проверяться как по RSI, так и по MACD. Сигнал сработает, если сработал хотя бы один." />
+            <div className={`space-y-4 ${!isCustom ? 'opacity-50' : ''}`}>
+                <div className="label-heading text-green-400">Настройки RSI и фильтры</div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {/* 1. RSI Period */}
+                    <InputField label="RSI период" value={divRsiPeriod} 
+                        setter={v => {handleValueChange(setDivRsiPeriod, v); checkPresetOnChange();}}
+                        infoText="Период для расчета RSI." min="5" max="30" disabled={!isCustom} />
+                    
+                    {/* 2. Min RSI Diff */}
+                    <InputField label="Миним. разница RSI" value={divRsiDiffMin} 
+                        setter={v => {handleValueChange(setDivRsiDiffMin, v); checkPresetOnChange();}}
+                        infoText="Минимальная разница между RSI(сейчас) и RSI(T-свечей назад)." min="1" max="15" step="0.5" disabled={!isCustom} />
+                    
+                    {/* 3. Max RSI Diff (ВАШЕ MAX_DI) */}
+                    <InputField label="Макс. разница RSI (max_di)" value={divMaxRsiDiff} 
+                        setter={v => handleValueChange(setDivMaxRsiDiff, v)}
+                        infoText="Максимально допустимая разница RSI. Если разница > max_di, сигнал игнорируется." min="5" max="50" disabled={!isCustom} />
+                    
+                    {/* 4. Compare Period (T) */}
+                    <InputField label="Период сравнения (T)" value={divRsiPeriodCompare} 
+                        setter={v => handleValueChange(setDivRsiPeriodCompare, v)}
+                        infoText="Количество свечей назад, с которыми сравнивается текущий RSI и цена." min="2" max="30" disabled={!isCustom} />
                 </div>
-            </div>
 
-            {divUseMacd && (
+                <div className="h-px bg-[#1b1f2a]" />
+
+                <div className="label-heading text-green-400">Настройки MACD (Дополнительный фильтр)</div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {/* 5. Use MACD Checkbox */}
+                    <div className="md:col-span-4">
+                        <InputField label="Использовать MACD-дивергенцию" type="checkbox" checked={divUseMacd} 
+                            setter={v => handleValueChange(setDivUseMacd, v)}
+                            infoText="Если включено, дивергенция проверяется как по RSI, так и по MACD." disabled={!isCustom} />
+                    </div>
+                </div>
+
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 transition-all duration-300">
                     {/* 6. MACD Fast */}
-                    <InputField label="MACD Fast" value={divMacdFast} setter={setDivMacdFast} isMacdParam={true} min="5" max="50" />
-                    
+                    <InputField label="MACD Fast" value={divMacdFast} setter={setDivMacdFast} isMacdParam={true} min="5" max="50" disabled={!isCustom || !divUseMacd} />
                     {/* 7. MACD Slow */}
-                    <InputField label="MACD Slow" value={divMacdSlow} setter={setDivMacdSlow} isMacdParam={true} min="15" max="100" />
-                    
-                    {/* 8. MACD Signal (хотя в logic.js не используется, но для полноты) */}
-                    <InputField label="MACD Signal" value={divMacdSignal} setter={setDivMacdSignal} isMacdParam={true} min="5" max="20" />
-                    
+                    <InputField label="MACD Slow" value={divMacdSlow} setter={setDivMacdSlow} isMacdParam={true} min="15" max="100" disabled={!isCustom || !divUseMacd} />
+                    {/* 8. MACD Signal */}
+                    <InputField label="MACD Signal" value={divMacdSignal} setter={setDivMacdSignal} isMacdParam={true} min="5" max="20" disabled={!isCustom || !divUseMacd} />
                     {/* 9. MACD Min Diff */}
                     <InputField label="MACD Мин. разница" value={divMacdMinDiff} setter={setDivMacdMinDiff} isMacdParam={true} step="0.00001" min="0" 
-                                infoText="Минимальное изменение MACD линии, необходимое для регистрации дивергенции."/>
-                    
+                        infoText="Минимальное изменение MACD линии, необходимое для регистрации дивергенции." disabled={!isCustom || !divUseMacd} />
                     {/* 10. MACD Compare Period */}
                     <InputField label="MACD Период (T)" value={divMacdComparePeriod} setter={setDivMacdComparePeriod} isMacdParam={true} min="5" max="30" 
-                                infoText="Количество свечей назад, с которыми сравнивается MACD-линия."/>
+                        infoText="Количество свечей назад, с которыми сравнивается MACD-линия." disabled={!isCustom || !divUseMacd} />
                 </div>
-            )}
+
+                <div className="h-px bg-[#1b1f2a]" />
+
+                {/* ФИЛЬТРЫ ПОДТВЕРЖДЕНИЯ (НОВЫЙ БЛОК) */}
+                <div className="label-heading text-green-400">Фильтры подтверждения (для класса S2/S3)</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <InputField label="Мин. CVD для Confirmed (USD)" value={divMinCVDConfirmUsd} 
+                        setter={setDivMinCVDConfirmUsd}
+                        infoText="Требует минимального абсолютного значения CVD для повышения класса сигнала (S2/S3)." min="0" step="10000" disabled={!isCustom} />
+
+                    <InputField label="Мин. OI % для Confirmed (абс. знач.)" value={divMinOIConfirmPct} 
+                        setter={setDivMinOIConfirmPct}
+                        infoText="Требует минимального абсолютного изменения OI (%) для повышения класса сигнала (S2/S3)." min="0" step="0.01" disabled={!isCustom} />
+                </div>
+            </div>
         </div>
     );
 }
@@ -268,7 +288,8 @@ function App(){
     divergence: true, pumpdump: true, flow: false, bos: false, disbalance: false, smartpump: true
   });
   const [moduleTfs, setModuleTfs] = useState({
-    divergence: '15m', pumpdump: '5m', flow: '5m', bos: '5m', disbalance: '5m', smartpump: '5m'
+    divergence: '1h', // Defaulting to 1h for stability
+    pumpdump: '5m', flow: '5m', bos: '5m', disbalance: '5m', smartpump: '5m'
   });
 
   const [minVol, setMinVol] = useState(50);
@@ -287,21 +308,23 @@ function App(){
   const [pumpPreset, setPumpPreset] = useState('mid');
   const [pumpCustom, setPumpCustom] = useState({});
 
-  // Divergence - OLD
-  const [divPreset, setDivPreset] = useState('mid');
-  const [divRsiPeriod, setDivRsiPeriod] = useState(9);
-  const [divRsiDiffMin, setDivRsiDiffMin] = useState(4);
-  
-  // Divergence - NEW MACD and MaxDiff STATES!
-  const [divMaxRsiDiff, setDivMaxRsiDiff] = useState(15);
-  const [divRsiPeriodCompare, setDivRsiPeriodCompare] = useState(5);
+  // Divergence - Defaulting to the strict 1h settings
+  const [divPreset, setDivPreset] = useState('custom');
+  const [divRsiPeriod, setDivRsiPeriod] = useState(30); 
+  const [divRsiDiffMin, setDivRsiDiffMin] = useState(9.0);
+  const [divMaxRsiDiff, setDivMaxRsiDiff] = useState(40);
+  const [divRsiPeriodCompare, setDivRsiPeriodCompare] = useState(12);
   const [divUseMacd, setDivUseMacd] = useState(true);
   const [divMacdFast, setDivMacdFast] = useState(12);
   const [divMacdSlow, setDivMacdSlow] = useState(26);
   const [divMacdSignal, setDivMacdSignal] = useState(9);
-  const [divMacdMinDiff, setDivMacdMinDiff] = useState(0.0001);
-  const [divMacdComparePeriod, setDivMacdComparePeriod] = useState(10);
+  const [divMacdMinDiff, setDivMacdMinDiff] = useState(0.005);
+  const [divMacdComparePeriod, setDivMacdComparePeriod] = useState(18);
   const [divCustom, setDivCustom] = useState({});
+  // NEW Confirmation Filters
+  const [divMinCVDConfirmUsd, setDivMinCVDConfirmUsd] = useState(0); 
+  const [divMinOIConfirmPct, setDivMinOIConfirmPct] = useState(0); 
+
 
   // SmartPump settings
   const [spPreset, setSpPreset] = useState('mid');
@@ -359,6 +382,10 @@ function App(){
       if (s.divMacdSignal!=null) setDivMacdSignal(s.divMacdSignal);
       if (s.divMacdMinDiff!=null) setDivMacdMinDiff(s.divMacdMinDiff);
       if (s.divMacdComparePeriod!=null) setDivMacdComparePeriod(s.divMacdComparePeriod);
+      // NEW CONFIRMATION FILTERS LOAD
+      if (s.divMinCVDConfirmUsd!=null) setDivMinCVDConfirmUsd(s.divMinCVDConfirmUsd);
+      if (s.divMinOIConfirmPct!=null) setDivMinOIConfirmPct(s.divMinOIConfirmPct);
+
 
       if (s.divCustom) setDivCustom(s.divCustom);
       
@@ -394,6 +421,8 @@ function App(){
       divPreset, divRsiPeriod, divRsiDiffMin, divCustom,
       // NEW DIV SAVE
       divMaxRsiDiff, divRsiPeriodCompare, divUseMacd, divMacdFast, divMacdSlow, divMacdSignal, divMacdMinDiff, divMacdComparePeriod,
+      // NEW CONFIRMATION FILTERS SAVE
+      divMinCVDConfirmUsd, divMinOIConfirmPct,
       
       spMinOIPct, spMinPricePct, spPreset, spCustom,
       flowPreset, flowOIPct, flowCVDUsd, flowCustom,
@@ -408,6 +437,8 @@ function App(){
     divPreset, divRsiPeriod, divRsiDiffMin, divCustom,
     // NEW DIV DEPENDENCIES
     divMaxRsiDiff, divRsiPeriodCompare, divUseMacd, divMacdFast, divMacdSlow, divMacdSignal, divMacdMinDiff, divMacdComparePeriod,
+    // NEW CONFIRMATION FILTERS DEPENDENCIES
+    divMinCVDConfirmUsd, divMinOIConfirmPct,
     
     spMinOIPct, spMinPricePct, spPreset, spCustom,
     flowPreset, flowOIPct, flowCVDUsd, flowCustom,
@@ -417,10 +448,9 @@ function App(){
   ]);
 
   // --- NEW: Check if current values match any standard preset ---
-  const checkAndApplyPreset = (moduleKey, v1, v2, v3, v4, v5, v6) => {
+  const checkAndApplyPreset = (moduleKey, v1, v2) => {
     let presets = [];
     let setters = [];
-    // ... (rest of the checkAndApplyPreset logic remains the same for other modules)
     if(moduleKey==='pump'){ presets=pumpPresets; setters=[setPumpPreset, setPumpMinOIPct, setPumpMinCVDUsd]; }
     else if(moduleKey==='smartpump'){ presets=spPresets; setters=[setSpPreset, setSpMinOIPct, setSpMinPricePct]; }
     else if(moduleKey==='flow'){ presets=flowPresets; setters=[setFlowPreset, setFlowOIPct, setFlowCVDUsd]; }
@@ -428,10 +458,10 @@ function App(){
     else if(moduleKey==='bos'){ presets=bosPresets; setters=[setBosPreset, setBosPeriod, setBosVolumeMult, setBosEmaPeriod]; }
     else if(moduleKey==='div'){ 
         presets=divPresets; 
-        // Примечание: Мы сравниваем только RSI Period и Min Diff, чтобы определить, это "custom" или стандартный пресет.
-        setters=[setDivPreset, setDivRsiPeriod, setDivRsiDiffMin]; 
+        setters=[setDivPreset, setDivRsiPeriod, setDivRsiDiffMin, setDivMaxRsiDiff, setDivRsiPeriodCompare, setDivUseMacd, setDivMacdFast, setDivMacdSlow, setDivMacdSignal, setDivMacdMinDiff, setDivMacdComparePeriod]; 
     }
 
+    // This logic only checks the primary two parameters (v1, v2) for simplicity
     for(const p of presets){
       const vals = getPresetValues(moduleKey, p.name);
       if(!vals) continue;
@@ -459,10 +489,11 @@ function App(){
     if (moduleKey === 'pump') {
       setPumpCustom({ pumpMinOIPct, pumpMinCVDUsd }); 
     } else if (moduleKey === 'div') {
-      // NEW DIV SAVE: Сохраняем все 8 параметров дивергенции в custom state
+      // NEW DIV SAVE: Сохраняем все 10 параметров дивергенции в custom state
       setDivCustom({ 
         divRsiPeriod, divRsiDiffMin, divMaxRsiDiff, divRsiPeriodCompare,
-        divUseMacd, divMacdFast, divMacdSlow, divMacdSignal, divMacdMinDiff, divMacdComparePeriod
+        divUseMacd, divMacdFast, divMacdSlow, divMacdSignal, divMacdMinDiff, divMacdComparePeriod,
+        divMinCVDConfirmUsd, divMinOIConfirmPct
       }); 
     } else if (moduleKey === 'smartpump') {
         setSpCustom({ spMinOIPct, spMinPricePct });
@@ -485,7 +516,7 @@ function App(){
       if(custom.divRsiPeriod!=null) setDivRsiPeriod(custom.divRsiPeriod);
       if(custom.divRsiDiffMin!=null) setDivRsiDiffMin(custom.divRsiDiffMin);
       
-      // NEW DIV LOAD: Загружаем все 8 параметров
+      // NEW DIV LOAD: Загружаем все 10 параметров
       if(custom.divMaxRsiDiff!=null) setDivMaxRsiDiff(custom.divMaxRsiDiff);
       if(custom.divRsiPeriodCompare!=null) setDivRsiPeriodCompare(custom.divRsiPeriodCompare);
       if(typeof custom.divUseMacd==='boolean') setDivUseMacd(custom.divUseMacd);
@@ -494,6 +525,11 @@ function App(){
       if(custom.divMacdSignal!=null) setDivMacdSignal(custom.divMacdSignal);
       if(custom.divMacdMinDiff!=null) setDivMacdMinDiff(custom.divMacdMinDiff);
       if(custom.divMacdComparePeriod!=null) setDivMacdComparePeriod(custom.divMacdComparePeriod);
+      
+      // NEW CONFIRMATION FILTERS LOAD
+      if(custom.divMinCVDConfirmUsd!=null) setDivMinCVDConfirmUsd(custom.divMinCVDConfirmUsd);
+      if(custom.divMinOIConfirmPct!=null) setDivMinOIConfirmPct(custom.divMinOIConfirmPct);
+
 
     } else if (moduleKey === 'smartpump') {
       custom = spCustom;
@@ -544,7 +580,7 @@ function App(){
       if(vals){
         setDivRsiPeriod(vals.rsiPeriod); 
         setDivRsiDiffMin(vals.rsiDiffMin);
-        // NEW DIV APPLY: Применяем все параметры из пресета
+        // NEW DIV APPLY: Применяем все 10 параметров из пресета
         setDivMaxRsiDiff(vals.maxRsiDiff);
         setDivRsiPeriodCompare(vals.rsiPeriodCompare);
         setDivUseMacd(vals.useMacd);
@@ -553,6 +589,9 @@ function App(){
         setDivMacdSignal(vals.macdSignal);
         setDivMacdMinDiff(vals.macdMinDiff);
         setDivMacdComparePeriod(vals.macdComparePeriod);
+        // NEW CONFIRMATION FILTERS APPLY (defaults to 0 for presets)
+        setDivMinCVDConfirmUsd(vals.minCVDConfirmUsd || 0);
+        setDivMinOIConfirmPct(vals.minOIConfirmPct || 0);
       }
     }
     setStatus(`✅ Пресет диверов: ${name}`);
@@ -640,7 +679,7 @@ function App(){
   };
   const onStatus = (msg)=> setStatus(`${nowTime()} — ${msg}`);
 
-  // Start/Stop (Обновлено для Divergence: передаем все 8 параметров в logic.js)
+  // Start/Stop (Обновлено для Divergence: передаем все 10 параметров в logic.js)
   const handleStart = ()=>{
     if (!isAnyModuleActive) {
       setStatus(`⛔️ Ошибка: Выберите хотя бы один модуль.`);
@@ -676,18 +715,21 @@ function App(){
     Settings.sensitivity.pumpMinOIPct = Number(pumpMinOIPct)||0.05;
     Settings.sensitivity.pumpMinCVDUsd = Number(pumpMinCVDUsd)||500000;
 
-    // Divergence: PASS ALL 8 PARAMS
+    // Divergence: PASS ALL 10 PARAMS
     Settings.sensitivity.div = {
         rsiPeriod: Number(divRsiPeriod)||9,
         rsiDiffMin: Number(divRsiDiffMin)||4,
-        maxRsiDiff: Number(divMaxRsiDiff)||15, // NEW
-        rsiPeriodCompare: Number(divRsiPeriodCompare)||5, // NEW
-        useMacd: !!divUseMacd, // NEW
-        macdFast: Number(divMacdFast)||12, // NEW
-        macdSlow: Number(divMacdSlow)||26, // NEW
-        macdSignal: Number(divMacdSignal)||9, // NEW
-        macdMinDiff: Number(divMacdMinDiff)||0.0001, // NEW
-        macdComparePeriod: Number(divMacdComparePeriod)||10, // NEW
+        maxRsiDiff: Number(divMaxRsiDiff)||15,
+        rsiPeriodCompare: Number(divRsiPeriodCompare)||5,
+        useMacd: !!divUseMacd,
+        macdFast: Number(divMacdFast)||12,
+        macdSlow: Number(divMacdSlow)||26,
+        macdSignal: Number(divMacdSignal)||9,
+        macdMinDiff: Number(divMacdMinDiff)||0.0001,
+        macdComparePeriod: Number(divMacdComparePeriod)||10,
+        // NEW CONFIRMATION FILTERS
+        minCVDConfirmUsd: Number(divMinCVDConfirmUsd) || 0,
+        minOIConfirmPct: Number(divMinOIConfirmPct) || 0,
     };
 
 
@@ -697,12 +739,11 @@ function App(){
     Settings.minVolumeM = Number(minVol)||50;
     Settings.exchanges = { binance: useBinance, bybit: useBybit };
     Settings.sensitivity = {
-      ...Settings.sensitivity, // Keep other sensitivities
+      ...Settings.sensitivity, 
       sound: !!soundOn,
       cooldownSec: Number(cooldownSec)||1800,
     };
     
-    // Note: Settings.sensitivity.div is already set above, no need to overwrite here
 
     if (typeof toggleSound === 'function') toggleSound(Settings.sensitivity.sound);
     setSignals([]);
@@ -750,9 +791,13 @@ function App(){
     </div>
   );
 
-  const renderDivergenceSettingsPanel = () => {
+  // Replaces the inline renderDivergenceSettingsPanel
+  const DivergenceSettingsRenderer = () => {
     return (
         <DivergenceSettingsPanel
+            divPreset={divPreset}
+            applyDivPreset={applyDivPreset}
+            divPresets={divPresets}
             // RSI
             divRsiPeriod={divRsiPeriod} setDivRsiPeriod={setDivRsiPeriod}
             divRsiDiffMin={divRsiDiffMin} setDivRsiDiffMin={setDivRsiDiffMin}
@@ -766,8 +811,12 @@ function App(){
             divMacdSignal={divMacdSignal} setDivMacdSignal={setDivMacdSignal}
             divMacdMinDiff={divMacdMinDiff} setDivMacdMinDiff={setDivMacdMinDiff}
             divMacdComparePeriod={divMacdComparePeriod} setDivMacdComparePeriod={setDivMacdComparePeriod}
-            // Preset Check
+            // Confirmation Filters
+            divMinCVDConfirmUsd={divMinCVDConfirmUsd} setDivMinCVDConfirmUsd={setDivMinCVDConfirmUsd}
+            divMinOIConfirmPct={divMinOIConfirmPct} setDivMinOIConfirmPct={setDivMinOIConfirmPct}
+            // Utilities
             checkAndApplyPreset={checkAndApplyPreset}
+            renderPresetChips={renderPresetChips}
         />
     );
   }
@@ -812,7 +861,7 @@ function App(){
                 </span>
                 <span className={`chip ${activeModules.flow ? 'active' : ''}`} onClick={() => toggleModule('flow')}>
                   🌊 Flow/Поток
-                  <InfoTooltip text="Ищет сильный объем в одном направлении (Agg Buy/Sell), сопровождаемый ростом OI и CVD. Используется для подтверждения рыночного потока." />
+                  <InfoTooltip text="Ищет сильный объем в одном направлении (Agg Buy/Sell), сопровождаемый ростом OI и CVD. Используется для подтверждения направленного рыночного потока." />
                 </span>
                 <span className={`chip ${activeModules.disbalance ? 'active' : ''}`} onClick={() => toggleModule('disbalance')}>
                   ⚖️ Дисбаланс CVD/OI
@@ -1080,9 +1129,31 @@ function App(){
 
           {/* DIVERGENCE (NEW PANEL) */}
           <div>
-            <div className="th mb-2">Пресет для диверов (RSI + MACD)</div>
-            {renderPresetChips(divPreset, applyDivPreset, divPresets)}
-            {divPreset === 'custom' && renderDivergenceSettingsPanel()}
+            {/* The component itself renders its own preset chips based on props */}
+            <DivergenceSettingsPanel
+                divPreset={divPreset}
+                applyDivPreset={applyDivPreset}
+                divPresets={divPresets}
+                // RSI Params
+                divRsiPeriod={divRsiPeriod} setDivRsiPeriod={setDivRsiPeriod}
+                divRsiDiffMin={divRsiDiffMin} setDivRsiDiffMin={setDivRsiDiffMin}
+                // Max Diff / Compare Period
+                divMaxRsiDiff={divMaxRsiDiff} setDivMaxRsiDiff={setDivMaxRsiDiff}
+                divRsiPeriodCompare={divRsiPeriodCompare} setDivRsiPeriodCompare={setDivRsiPeriodCompare}
+                // MACD Params
+                divUseMacd={divUseMacd} setDivUseMacd={setDivUseMacd}
+                divMacdFast={divMacdFast} setDivMacdFast={setDivMacdFast}
+                divMacdSlow={divMacdSlow} setDivMacdSlow={setDivMacdSlow}
+                divMacdSignal={divMacdSignal} setDivMacdSignal={setDivMacdSignal}
+                divMacdMinDiff={divMacdMinDiff} setDivMacdMinDiff={setDivMacdMinDiff}
+                divMacdComparePeriod={divMacdComparePeriod} setDivMacdComparePeriod={setDivMacdComparePeriod}
+                // Confirmation Filters
+                divMinCVDConfirmUsd={divMinCVDConfirmUsd} setDivMinCVDConfirmUsd={setDivMinCVDConfirmUsd}
+                divMinOIConfirmPct={divMinOIConfirmPct} setDivMinOIConfirmPct={setDivMinOIConfirmPct}
+                // Utilities
+                checkAndApplyPreset={checkAndApplyPreset}
+                renderPresetChips={renderPresetChips}
+            />
           </div>
 
         </div>
@@ -1099,23 +1170,23 @@ function App(){
               const isSmartPump = s.reason?.startsWith?.('Smart Pump') || s.kind?.startsWith?.('⚡ Smart Pump'); 
               const isPumpDump = s.kind?.startsWith?.('PUMP') || s.kind?.startsWith?.('DUMP'); 
               const isBOS = s.kind?.includes?.('BOS');
-               
+                
               const smartPumpCount = s.detail?.smartPumpCount24h ?? null; 
-               
+                
               const volStr = s.detail?.volMult!=null ? `Vol×${fmt(s.detail.volMult,2)}` : ''; 
               // NEW: Если это дивергенция, пытаемся показать RSI или MACD детали
               const rsiStr = isDiv && s.detail?.reasons?.includes('RSI') ? 
                   `RSI: ${fmt(s.detail?.rNow,0)} (Δ ${fmt(s.detail?.rsiDelta,1)})` : null; 
               const macdStr = isDiv && s.detail?.reasons?.includes('MACD') ? 
                   `MACD Δ: ${fmt(s.detail?.macdDelta, 4)}` : null;
-               
+                
               const oiVal  = s.detail?.oi  ?? s.detail?.oiPct  ?? null;
               const cvdVal = s.detail?.cvd ?? s.detail?.cvdUsd ?? null;
               const priceChangePct = s.detail?.priceChangePct ?? null;
-               
+                
               const emaVal = s.detail?.ema ?? null;
               const emaPeriod = s.detail?.emaPeriod ?? null;
-               
+                
               // Расчет OI в USD
               const oiUsd = (oiVal != null && s.price != null && s.detail?.oiUsd!=null) 
                 ? s.detail.oiUsd
@@ -1137,7 +1208,7 @@ function App(){
               // NEW: Элемент для EMA (только для BOS)
               const emaElement = emaVal!=null && isBOS ? (
                   <span className={s.price > emaVal ? 'text-green-400' : 'text-red-400'}>
-                      EMA{emaPeriod}: {fmt(emaVal, 4)}
+                    EMA{emaPeriod}: {fmt(emaVal, 4)}
                   </span>
               ) : null;
               
@@ -1149,14 +1220,14 @@ function App(){
               
               const priceChangeElement = priceChangePct!=null ? ( 
                   <span className={getColorClass(priceChangePct)}>
-                      Δ: {priceChangePct > 0 ? '↗ ' : '↘ '}{fmt(Math.abs(priceChangePct), 2)}%
+                    Δ: {priceChangePct > 0 ? '↗ ' : '↘ '}{fmt(Math.abs(priceChangePct), 2)}%
                   </span>
               ) : null;
               
               // Элемент для счетчика SmartPump
               const spCountElement = smartPumpCount!=null && isSmartPump ? (
                   <span className='text-yellow-400 font-bold' style={{textShadow: '0 0 5px rgba(255, 255, 0, 0.5)'}}>
-                      24h: {smartPumpCount}×
+                    24h: {smartPumpCount}×
                   </span>
               ) : null;
 
@@ -1169,8 +1240,8 @@ function App(){
                 isBOS ? emaElement : cvdElement,
                 spCountElement, 
                 (isBOS || isDiv) ? volStr : null,
-                rsiStr, // NEW
-                macdStr, // NEW
+                rsiStr, 
+                macdStr, 
               ].filter(Boolean);
 
 
@@ -1193,8 +1264,8 @@ function App(){
               
               const reasonDisplay = (
                   <span className="font-semibold text-blue-400" style={{textShadow: '0 0 5px rgba(0, 191, 255, 0.5)'}}>
-                      {s.kind || s.reason}
-                      <InfoTooltip text={descriptionText} />
+                    {s.kind || s.reason}
+                    <InfoTooltip text={descriptionText} />
                   </span>
               );
 
