@@ -10,7 +10,7 @@ const divPresets = {
         maxRsiDiff: 15,
         rsiPeriodCompare: 5,
         useMacd: false, // MACD отключен для быстрых/ранних сигналов
-        macdFast: 12, macdSlow: 26, macdSignal: 9, macdDiffMin: 0.0001, macdComparePeriod: 10,
+        macdFast: 12, macdSlow: 26, macdSignal: 9, macdMinDiff: 0.0001, macdComparePeriod: 10, // ИСПРАВЛЕНО: macdDiffMin -> macdMinDiff
         minCVDConfirmUsd: 0,  // Фильтры подтверждения по умолчанию
         minOIConfirmPct: 0,
     },
@@ -21,7 +21,7 @@ const divPresets = {
         maxRsiDiff: 20,
         rsiPeriodCompare: 10,
         useMacd: true, 
-        macdFast: 12, macdSlow: 26, macdSignal: 9, macdDiffMin: 0.0002, macdComparePeriod: 15, // MACD чуть строже
+        macdFast: 12, macdSlow: 26, macdSignal: 9, macdMinDiff: 0.0002, macdComparePeriod: 15, // ИСПРАВЛЕНО: macdDiffMin -> macdMinDiff
         minCVDConfirmUsd: 0,  // Фильтры подтверждения по умолчанию
         minOIConfirmPct: 0,
     },
@@ -32,7 +32,7 @@ const divPresets = {
         maxRsiDiff: 30, // Выше max_di, чтобы пропустить экстремально сильные движения
         rsiPeriodCompare: 15,
         useMacd: true, 
-        macdFast: 12, macdSlow: 26, macdSignal: 9, macdDiffMin: 0.0005, macdComparePeriod: 20, // MACD строгий
+        macdFast: 12, macdSlow: 26, macdSignal: 9, macdMinDiff: 0.0005, macdComparePeriod: 20, // ИСПРАВЛЕНО: macdDiffMin -> macdMinDiff
         minCVDConfirmUsd: 0,  // Фильтры подтверждения по умолчанию
         minOIConfirmPct: 0,
     },
@@ -43,7 +43,7 @@ const divPresets = {
         maxRsiDiff: 40,
         rsiPeriodCompare: 12,
         useMacd: true,
-        macdFast: 12, macdSlow: 26, macdSignal: 9, macdDiffMin: 0.005, macdComparePeriod: 18,
+        macdFast: 12, macdSlow: 26, macdSignal: 9, macdMinDiff: 0.005, macdComparePeriod: 18, // ИСПРАВЛЕНО: macdDiffMin -> macdMinDiff
         minCVDConfirmUsd: 250000, // Высокий порог, чтобы убрать шум (только для этого пресета)
         minOIConfirmPct: 0.05,
     }
@@ -86,18 +86,18 @@ const Settings = {
       divergencePreset: 'Свои настройки', // <--- НОВОЕ: Текущий активный пресет
       
       // Настройки RSI (по умолчанию для "Свои настройки")
-      rsiPeriod: 16,
-      rsiDiffMin: 8,
-      maxRsiDiff: 15,    
-      rsiPeriodCompare: 5,
+      rsiPeriod: 30, // Скорректировано на 'Строгий 1H' по умолчанию
+      rsiDiffMin: 9.0, // Скорректировано на 'Строгий 1H' по умолчанию
+      maxRsiDiff: 40,  // Скорректировано на 'Строгий 1H' по умолчанию 
+      rsiPeriodCompare: 12, // Скорректировано на 'Строгий 1H' по умолчанию
 
       // Настройки MACD
       useMacd: true,
       macdFast: 12,
       macdSlow: 26,
       macdSignal: 9,
-      macdDiffMin: 0.0001,
-      macdComparePeriod: 10,
+      macdMinDiff: 0.005, // ИСПРАВЛЕНО: macdDiffMin -> macdMinDiff, скорректировано на 'Строгий 1H'
+      macdComparePeriod: 18, // Скорректировано на 'Строгий 1H' по умолчанию
       
       // === NEW CONFIRMATION FILTERS ===
       minCVDConfirmUsd: 0, // Минимальный CVD для подтверждения (S2/S3)
@@ -357,7 +357,7 @@ function analyzeDivergenceSmart(kl, oiVal, cvdVal){
   const cfg = Settings.sensitivity.div;
   const priceNow = +kl[idx][4];
 
-  let divSignal = { side: null, reasons: [] };
+  let divSignal = { side: null, reasons: [], rNow: null, rsiDelta: null, macdDelta: null }; // Добавил поля для rNow, rsiDelta, macdDelta
 
   // ===================================
   // 1. ПРОВЕРКА RSI-ДИВЕРГЕНЦИИ
@@ -376,19 +376,22 @@ function analyzeDivergenceSmart(kl, oiVal, cvdVal){
       if(rNow != null && rPrev != null){
         const rsiDelta = rNow - rPrev;
         const absRsiDelta = Math.abs(rsiDelta);
+        
+        divSignal.rNow = rNow;
+        divSignal.rsiDelta = rsiDelta;
 
         if(absRsiDelta <= maxDiff && absRsiDelta > minDiff) { 
           // Bullish (Лонг): Цена упала И RSI вырос
           if(priceNow < pricePrev && rsiDelta > 0){ 
             if (divSignal.side === 'Шорт') return null; 
             divSignal.side = 'Лонг';
-            divSignal.reasons.push(`Bullish RSI (T${comparePeriod})`); 
+            divSignal.reasons.push('RSI'); // Упрощаем причину
           }
           // Bearish (Шорт): Цена выросла И RSI упал
           else if(priceNow > pricePrev && rsiDelta < 0){ 
             if (divSignal.side === 'Лонг') return null; 
             divSignal.side = 'Шорт';
-            divSignal.reasons.push(`Bearish RSI (T${comparePeriod})`); 
+            divSignal.reasons.push('RSI'); // Упрощаем причину
           }
         }
       }
@@ -402,7 +405,7 @@ function analyzeDivergenceSmart(kl, oiVal, cvdVal){
     const macdFast = cfg.macdFast || 12;
     const macdSlow = cfg.macdSlow || 26;
     const macdSignal = cfg.macdSignal || 9;
-    const macdMinDiff = cfg.macdDiffMin || 0.0001;
+    const macdMinDiff = cfg.macdMinDiff || 0.0001; // ИСПРАВЛЕНО: macdDiffMin -> macdMinDiff
     const macdComparePeriod = cfg.macdComparePeriod || 10;
     
     if(kl.length >= macdSlow + macdComparePeriod) { 
@@ -414,19 +417,21 @@ function analyzeDivergenceSmart(kl, oiVal, cvdVal){
       if(macdNow != null && macdPrev != null){
         const macdDelta = macdNow - macdPrev;
         const absMacdDelta = Math.abs(macdDelta);
+        
+        divSignal.macdDelta = macdDelta;
 
         if(absMacdDelta > macdMinDiff){
           // Bullish (Лонг): Цена упала И MACD вырос
           if(priceNow < pricePrev && macdDelta > 0){ 
             if (divSignal.side === 'Шорт') return null;
             divSignal.side = 'Лонг';
-            divSignal.reasons.push(`Bullish MACD (T${macdComparePeriod})`); 
+            divSignal.reasons.push('MACD'); // Упрощаем причину
           }
           // Bearish (Шорт): Цена выросла И MACD упал
           else if(priceNow > pricePrev && macdDelta < 0){ 
             if (divSignal.side === 'Лонг') return null; 
             divSignal.side = 'Шорт';
-            divSignal.reasons.push(`Bearish MACD (T${macdComparePeriod})`); 
+            divSignal.reasons.push('MACD'); // Упрощаем причину
           }
         }
       }
@@ -491,6 +496,9 @@ function analyzeDivergenceSmart(kl, oiVal, cvdVal){
     reason,
     price:priceNow,
     detail:{
+      rNow: divSignal.rNow, // Добавлено
+      rsiDelta: divSignal.rsiDelta, // Добавлено
+      macdDelta: divSignal.macdDelta, // Добавлено
       reasons: divSignal.reasons.join(', '),
       oi:oiVal,
       cvd:cvdVal,
