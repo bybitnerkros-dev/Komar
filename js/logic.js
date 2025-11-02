@@ -2,6 +2,7 @@
 
 // --- ГЛОБАЛЬНЫЕ ПРЕСЕТЫ ДЛЯ ДИВЕРГЕНЦИИ ---
 const divPresets = {
+// ... (пресеты остаются без изменений) ...
     // Пресет "Ранний дивер" (Bullish/Bearish): Быстрый RSI, низкая мин. разница
     'Ранний дивер': {
         rsiPeriod: 9, 
@@ -501,10 +502,8 @@ function analyzeDivergenceSmart(kl, oiVal, cvdVal){
 
 
 // ---- Pump/Dump (УПРОЩЕННАЯ ЛОГИКА: Только OI + CVD + Цена) ----
-// ... (остальные функции остаются без изменений) ...
 
 function analyzeSmartPump(kl, oiVal, cvdVal){
-// ... (analyzeSmartPump остается без изменений) ...
   if(!kl || oiVal==null) return null;
   const cfg = Settings.sensitivity.smartpump || {};
   const minOIPct = cfg.minOIPct||0.02;
@@ -530,7 +529,6 @@ function analyzeSmartPump(kl, oiVal, cvdVal){
 }
 
 function analyzePumpDumpSmart(kl, oiVal, cvdVal){
-// ... (analyzePumpDumpSmart остается без изменений) ...
   if(!kl || oiVal==null || cvdVal==null) return null;
   
   // 1. Пороги из настроек
@@ -584,9 +582,7 @@ function analyzePumpDumpSmart(kl, oiVal, cvdVal){
 
 // ===================
 // АНАЛИЗ СИМВОЛА (analyzeOne вынесен на глобальный уровень)
-// ... (analyzeOne и остальные функции остаются без изменений) ...
 async function analyzeOne(exchange, symbol){ 
-// ... (analyzeOne и остальные функции остаются без изменений) ...
   try {
     const limit = 200;
     const reqTFs = new Set();
@@ -658,7 +654,6 @@ async function analyzeOne(exchange, symbol){ 
 
 // ===================
 // ЦИКЛ
-// ... (остальной код цикла остается без изменений) ...
 function canSend(key){
   const cd=Settings.sensitivity.cooldownSec*1000;
   const now=Date.now();
@@ -721,6 +716,12 @@ function recordSmartPumpSignal(exchange, symbol, ts) {
 }
 
 function startLoop(cb){
+  // *** ИСПРАВЛЕНИЕ ОШИБКИ: ПРОВЕРКА НАЛИЧИЯ Settings ***
+  if (typeof Settings === 'undefined') {
+      console.error("Settings object not defined. Check logic.js file loading order.");
+      cb?.onStatus?.('Ошибка: Settings не определены. Проверьте логику загрузки файлов.');
+      return;
+  }
   if(_running) return;
   _running=true;
   cb?.onStatus?.('Старт...');
@@ -746,3 +747,4 @@ function stopLoop(cb){
   _running=false;
   if(_intervalId) clearInterval(_intervalId);
   cb?.onStatus?.('Остановлено');
+}
