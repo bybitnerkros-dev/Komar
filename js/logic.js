@@ -1,4 +1,4 @@
-// ===== KOMAR — Logic Engine (ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ: BOS с EMA) =====
+// ===== KOMAR — Logic Engine (ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ: BOS с EMA + Divergence с MACD/MaxDiff) =====
 
 // ---- НАСТРОЙКИ ----
 const Settings = {
@@ -36,6 +36,17 @@ const Settings = {
     div: {
       rsiPeriod:9,
       rsiDiffMin:4,
+      maxRsiDiff: 15,     // <--- НОВАЯ: Максимальная разница RSI (аналог max_di)
+      rsiPeriodCompare: 5, // <--- НОВАЯ: Период сравнения RSI
+
+      // === НОВЫЕ НАСТРОЙКИ MACD ===
+      useMacd: true,      // Включить проверку MACD (true/false)
+      macdFast: 12,
+      macdSlow: 26,
+      macdSignal: 9,
+      macdDiffMin: 0.0001, // Минимальная разница MACD
+      macdComparePeriod: 10 // Период сравнения MACD
+      // =============================
     },
 
     flow:{
@@ -53,7 +64,7 @@ const Settings = {
     bos:{
       bosPeriod:15,
       bosVolumeMult:3.0,
-      bosEmaPeriod: 20, // <-- NEW: Настройка периода EMA
+      bosEmaPeriod: 20,
       bosPreset:'strong'
     },
 
@@ -118,6 +129,27 @@ async function getSymbolsByVolume(){
 
   return out;
 }
+
+// ===================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (MACD, зависит от предполагаемых closes() и ema())
+// ===================
+
+// Примечание: Требуется глобальный доступ к функциям closes() и ema().
+function macd(klines, fastPeriod, slowPeriod, signalPeriod) {
+    if (!klines || klines.length < slowPeriod) return null;
+    
+    // Это упрощенный расчет MACD Line на последней свече. 
+    const cls = closes(klines);
+    
+    const fastEma = ema(cls, fastPeriod);
+    const slowEma = ema(cls, slowPeriod);
+    
+    if (fastEma === null || slowEma === null) return null;
+
+    // MACD Line = Fast EMA - Slow EMA
+    return fastEma - slowEma; 
+}
+
 
 // ===================
 // МОДУЛИ АНАЛИТИКИ
@@ -246,32 +278,99 @@ function analyzeFlowSmart(kl, oiVal, cvdVal){
   return null;
 }
 
-// ---- Divergence (ОЧИЩЕННАЯ ЛОГИКА) ----
+// ---- Divergence (ФИНАЛЬНАЯ ЛОГИКА: RSI + MACD) ----
 function analyzeDivergenceSmart(kl, oiVal, cvdVal){
   if(!kl || kl.length<50 || oiVal==null || cvdVal==null) return null;
   const idx = lastClosedIndex(kl);
   const cls = closes(kl);
-
-  const rsiPeriod = Settings.sensitivity.div.rsiPeriod || 9;
-  
-  // RSI на текущей закрытой свече
-  const rNow = rsi(cls, rsiPeriod);
-  
-  // RSI 5 свечей назад (для сравнения)
-  const rPrev = rsi(cls.slice(0,idx-4), rsiPeriod); 
-  
-  if(rNow==null || rPrev==null) return null;
-
+  const cfg = Settings.sensitivity.div;
   const priceNow = +kl[idx][4];
-  const pricePrev= +kl[idx-5][4];
-  const minDiff = Settings.sensitivity.div.rsiDiffMin || 4;
 
-  let side=null, baseReason='';
-  if(priceNow < pricePrev && rNow > rPrev + minDiff){ side='Лонг'; baseReason='Дивергенция: Bullish'; }
-  if(priceNow > pricePrev && rNow < rPrev - minDiff){ side='Шорт'; baseReason='Дивергенция: Bearish'; }
-  if(!side) return null;
+  // Переменная для сбора сигналов
+  let divSignal = { side: null, reasons: [] };
 
-  // Конфирмация
+  // ===================================
+  // 1. ПРОВЕРКА RSI-ДИВЕРГЕНЦИИ
+  // ===================================
+  if (cfg.rsiPeriod && cfg.rsiPeriodCompare) {
+    const rsiPeriod = cfg.rsiPeriod || 9;
+    const minDiff   = cfg.rsiDiffMin || 4;
+    const maxDiff   = cfg.maxRsiDiff || 15; // <-- ИСПОЛЬЗУЕМ maxRsiDiff (max_di)
+    const comparePeriod = cfg.rsiPeriodCompare || 5;
+
+    if(idx >= comparePeriod) {
+      const rNow = rsi(cls, rsiPeriod);
+      const rPrev = rsi(cls.slice(0,idx - comparePeriod + 1), rsiPeriod); 
+      const pricePrev= +kl[idx - comparePeriod][4];
+      
+      if(rNow != null && rPrev != null){
+        const rsiDelta = rNow - rPrev;
+        const absRsiDelta = Math.abs(rsiDelta);
+
+        if(absRsiDelta <= maxDiff && absRsiDelta > minDiff) { // <-- Проверка maxRsiDiff
+          // Bullish (Лонг): Цена упала И RSI вырос
+          if(priceNow < pricePrev && rsiDelta > 0){ 
+            if (divSignal.side === 'Шорт') return null; 
+            divSignal.side = 'Лонг';
+            divSignal.reasons.push(`Bullish RSI (T${comparePeriod})`); 
+          }
+          // Bearish (Шорт): Цена выросла И RSI упал
+          else if(priceNow > pricePrev && rsiDelta < 0){ 
+            if (divSignal.side === 'Лонг') return null; 
+            divSignal.side = 'Шорт';
+            divSignal.reasons.push(`Bearish RSI (T${comparePeriod})`); 
+          }
+        }
+      }
+    }
+  }
+
+  // ===================================
+  // 2. ПРОВЕРКА MACD-ДИВЕРГЕНЦИИ (В ДОПОЛНЕНИЕ)
+  // ===================================
+  if (cfg.useMacd) {
+    const macdFast = cfg.macdFast || 12;
+    const macdSlow = cfg.macdSlow || 26;
+    const macdSignal = cfg.macdSignal || 9;
+    const macdMinDiff = cfg.macdDiffMin || 0.0001;
+    const macdComparePeriod = cfg.macdComparePeriod || 10;
+    
+    if(kl.length >= macdSlow + macdComparePeriod) { 
+      
+      const macdNow = macd(kl.slice(0, idx + 1), macdFast, macdSlow, macdSignal);
+      const macdPrev = macd(kl.slice(0, idx - macdComparePeriod + 1), macdFast, macdSlow, macdSignal);
+      const pricePrev= +kl[idx - macdComparePeriod][4];
+
+      if(macdNow != null && macdPrev != null){
+        const macdDelta = macdNow - macdPrev;
+        const absMacdDelta = Math.abs(macdDelta);
+
+        if(absMacdDelta > macdMinDiff){
+          // Bullish (Лонг): Цена упала И MACD вырос
+          if(priceNow < pricePrev && macdDelta > 0){ 
+            if (divSignal.side === 'Шорт') return null;
+            divSignal.side = 'Лонг';
+            divSignal.reasons.push(`Bullish MACD (T${macdComparePeriod})`); 
+          }
+          // Bearish (Шорт): Цена выросла И MACD упал
+          else if(priceNow > pricePrev && macdDelta < 0){ 
+            if (divSignal.side === 'Лонг') return null; 
+            divSignal.side = 'Шорт';
+            divSignal.reasons.push(`Bearish MACD (T${macdComparePeriod})`); 
+          }
+        }
+      }
+    }
+  }
+  
+  // Если ни RSI, ни MACD не дали сигнал, выходим
+  if(!divSignal.side) return null;
+
+  // Формирование итогового ответа
+  const side = divSignal.side;
+  const baseReason = `Дивергенция: ${side} (${divSignal.reasons.join(' | ')})`;
+  
+  // Конфирмация CVD/OI (остается прежней)
   const isCvdOk = (side === 'Лонг' && cvdVal <= 0) || (side === 'Шорт' && cvdVal >= 0);
   const isOiOk  = (side === 'Лонг' && oiVal <= 0) || (side === 'Шорт' && oiVal >= 0);
 
@@ -299,8 +398,7 @@ function analyzeDivergenceSmart(kl, oiVal, cvdVal){
     reason,
     price:priceNow,
     detail:{
-      rNow,
-      rPrev,
+      reasons: divSignal.reasons.join(', '), // Причины: RSI, MACD или оба
       oi:oiVal,
       cvd:cvdVal,
       volMult,
@@ -308,6 +406,7 @@ function analyzeDivergenceSmart(kl, oiVal, cvdVal){
     } 
   };
 }
+
 
 // ---- Pump/Dump (УПРОЩЕННАЯ ЛОГИКА: Только OI + CVD + Цена) ----
 
