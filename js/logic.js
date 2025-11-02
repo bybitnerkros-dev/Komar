@@ -448,6 +448,7 @@ function analyzeDivergenceSmart(kl, oiVal, cvdVal){
   const isOiDirectionOk  = (side === 'Лонг' && oiVal <= 0) || (side === 'Шорт' && oiVal >= 0);
   
   // Проверка минимального объема подтверждения (НОВАЯ ЛОГИКА)
+  // Мы используем Math.abs() для проверки размера CVD/OI, неважно, положительный он или отрицательный.
   const isCvdSizeOk = Math.abs(cvdVal) >= minCVD;
   const isOiSizeOk = Math.abs(oiVal) >= minOI;
 
@@ -470,6 +471,13 @@ function analyzeDivergenceSmart(kl, oiVal, cvdVal){
       reason+=' [OI Confirmed]';
     }
   }
+  // *** КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Отсекаем сигналы класса S1 в Divergence ***
+  // Если класс S1, это означает, что дивергенция найдена, но не прошла по минимальным фильтрам CVD/OI.
+  // Это шум, который мы хотим отфильтровать.
+  if (scoreClass === 's1') {
+      return null;
+  }
+  // *******************************************************************
 
   // Для Divergence также проверяем объем сигнальной свечи относительно среднего
   const vols = volumes(kl);
@@ -493,8 +501,10 @@ function analyzeDivergenceSmart(kl, oiVal, cvdVal){
 
 
 // ---- Pump/Dump (УПРОЩЕННАЯ ЛОГИКА: Только OI + CVD + Цена) ----
+// ... (остальные функции остаются без изменений) ...
 
 function analyzeSmartPump(kl, oiVal, cvdVal){
+// ... (analyzeSmartPump остается без изменений) ...
   if(!kl || oiVal==null) return null;
   const cfg = Settings.sensitivity.smartpump || {};
   const minOIPct = cfg.minOIPct||0.02;
@@ -520,6 +530,7 @@ function analyzeSmartPump(kl, oiVal, cvdVal){
 }
 
 function analyzePumpDumpSmart(kl, oiVal, cvdVal){
+// ... (analyzePumpDumpSmart остается без изменений) ...
   if(!kl || oiVal==null || cvdVal==null) return null;
   
   // 1. Пороги из настроек
@@ -573,8 +584,9 @@ function analyzePumpDumpSmart(kl, oiVal, cvdVal){
 
 // ===================
 // АНАЛИЗ СИМВОЛА (analyzeOne вынесен на глобальный уровень)
-// ===================
+// ... (analyzeOne и остальные функции остаются без изменений) ...
 async function analyzeOne(exchange, symbol){ 
+// ... (analyzeOne и остальные функции остаются без изменений) ...
   try {
     const limit = 200;
     const reqTFs = new Set();
@@ -646,7 +658,7 @@ async function analyzeOne(exchange, symbol){ 
 
 // ===================
 // ЦИКЛ
-// ===================
+// ... (остальной код цикла остается без изменений) ...
 function canSend(key){
   const cd=Settings.sensitivity.cooldownSec*1000;
   const now=Date.now();
@@ -734,4 +746,3 @@ function stopLoop(cb){
   _running=false;
   if(_intervalId) clearInterval(_intervalId);
   cb?.onStatus?.('Остановлено');
-}
