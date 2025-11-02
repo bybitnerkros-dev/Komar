@@ -1,4 +1,3 @@
-// ===== React App (ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ: BOS с EMA) =====
 const { useEffect, useState } = React;
 
 function nowTime() {
@@ -49,7 +48,7 @@ function InfoTooltip({ text }) {
   );
 }
 
-// --- Preset Definitions (Обновлен BOS) ---
+// --- Preset Definitions ---
 const pumpPresets = [
   { name: 'early', label: '🟢 Ранний', color: '#00ff41', oi: 0.02, cvd: 150000 },
   { name: 'mid', label: '🟠 Средний', color: '#ffd700', oi: 0.05, cvd: 500000 },
@@ -71,20 +70,21 @@ const disbalancePresets = [
   { name: 'strong', label: '💥 Сильный', color: '#ff5555', oi: 0.25, cvd: 1500000 }
 ];
 const bosPresets = [
-  // NEW: Добавлен bosEmaPeriod
   { name: 'early', label: '🔪 Чувствительный (3 св.)', color: '#87cefa', period: 3, volMult: 1.5, emaPeriod: 10 },
   { name: 'mid', label: '📈 Стандарт (5 св.)', color: '#ffd700', period: 5, volMult: 2.0, emaPeriod: 20 },
   { name: 'strong', label: '🏰 Строгий (10 св.)', color: '#ff5555', period: 10, volMult: 3.0, emaPeriod: 50 }
 ];
+// NEW: Расширенные пресеты для дивергенции
 const divPresets = [
-  { name: 'early', label: '🟢 Ранний дивер', color: '#00ff41', rsiPeriod: 9, rsiDiffMin: 3 },
-  { name: 'mid', label: '🟠 Средний дивер', color: '#ffd700', rsiPeriod: 9, rsiDiffMin: 4 },
-  { name: 'strong', label: '🔴 Настоящий дивер', color: '#ff5555', rsiPeriod: 14, rsiDiffMin: 6 }
+  { name: 'early', label: '🟢 Ранний дивер', color: '#00ff41', rsiPeriod: 9, rsiDiffMin: 3, maxRsiDiff: 15, rsiPeriodCompare: 5, useMacd: false },
+  { name: 'mid', label: '🟠 Средний дивер', color: '#ffd700', rsiPeriod: 9, rsiDiffMin: 4, maxRsiDiff: 20, rsiPeriodCompare: 10, useMacd: true },
+  { name: 'strong', label: '🔴 Настоящий дивер', color: '#ff5555', rsiPeriod: 14, rsiDiffMin: 6, maxRsiDiff: 25, rsiPeriodCompare: 15, useMacd: true }
 ];
 
-// --- Utility function to get preset values (Обновлен BOS) ---
+// --- Utility function to get preset values ---
 function getPresetValues(moduleKey, name){
     const nameStr = name || 'mid';
+    // ... (logic for pump, smartpump, flow, disbalance, bos remains the same) ...
     if(moduleKey==='pump') {
         const p = pumpPresets.find(x=>x.name===nameStr);
         return p ? { minOIPct: p.oi, minCVDUsd: p.cvd } : null;
@@ -103,27 +103,162 @@ function getPresetValues(moduleKey, name){
     }
     if(moduleKey==='bos') {
         const p = bosPresets.find(x=>x.name===nameStr);
-        // NEW: Добавлен bosEmaPeriod
         return p ? { bosPeriod: p.period, bosVolumeMult: p.volMult, bosEmaPeriod: p.emaPeriod } : null;
     }
     if(moduleKey==='div') {
         const p = divPresets.find(x=>x.name===nameStr);
-        return p ? { divRsiPeriod: p.rsiPeriod, divRsiDiffMin: p.rsiDiffMin } : null;
+        // NEW: Возвращаем полный набор настроек для дивергенции
+        if (p) {
+             // MACD настройки не хранятся в пресетах divPresets, 
+             // поэтому используем значения по умолчанию для MACD
+            return { 
+                rsiPeriod: p.rsiPeriod, 
+                rsiDiffMin: p.rsiDiffMin,
+                maxRsiDiff: p.maxRsiDiff, // NEW
+                rsiPeriodCompare: p.rsiPeriodCompare, // NEW
+                useMacd: p.useMacd, // NEW
+                macdFast: 12,
+                macdSlow: 26,
+                macdSignal: 9,
+                macdMinDiff: 0.0001,
+                macdComparePeriod: 10,
+            };
+        }
+        return null;
     }
     return null;
 }
 
-// --- Signal Descriptions (Обновлен BOS) ---
+// --- Signal Descriptions ---
 const signalDescriptions = {
-  'Дивергенция': 'Ищет расхождение между ценой и RSI. Подтверждается нейтральным или противоположным потоком OI/CVD, что указывает на слабость текущего тренда.',
+  'Дивергенция': 'Ищет расхождение между ценой и индикатором (RSI и/или MACD). Подтверждается нейтральным или противоположным потоком OI/CVD, что указывает на слабость текущего тренда.',
   'PUMP': 'Резкий рост цены, подкрепленный аномально высоким ростом Open Interest (OI) и Кумулятивной Дельты Объема (CVD). Сильный сигнал активного входа.',
   'DUMP': 'Резкое падение цены, подкрепленное аномально высоким падением OI и CVD. Сильный сигнал активного выхода.',
   'Smart Pump': 'Ранний сигнал роста/падения цены, сопровождаемый значительным изменением OI. Используется для раннего обнаружения сильной направленной активности.',
   'Flow': 'Ищет сильный поток сделок (Agg Buy/Sell), сопровождаемый ростом OI и CVD. Используется для подтверждения направленного рыночного потока.',
   'Дисбаланс': 'Ситуация, когда цена движется против CVD, но в направлении изменения OI. Часто предшествует сквизу (резкому развороту).',
-  // NEW: Обновлено описание BOS
   'BOS': 'Break of Structure (BOS): ищет пробой экстремумов N-периодов назад на аномальном объеме, подтвержденный OI и нахождением цены выше/ниже настраиваемой EMA. Сигнал продолжения тренда.'
 };
+
+// ======================================
+// DIVERGENCE SETTINGS COMPONENT (NEW)
+// ======================================
+
+function DivergenceSettingsPanel({ 
+    // RSI
+    divRsiPeriod, setDivRsiPeriod, divRsiDiffMin, setDivRsiDiffMin, 
+    // NEW DIVERGENCE PARAMS
+    divMaxRsiDiff, setDivMaxRsiDiff, divRsiPeriodCompare, setDivRsiPeriodCompare,
+    // MACD PARAMS
+    divUseMacd, setDivUseMacd, divMacdFast, setDivMacdFast, divMacdSlow, setDivMacdSlow, 
+    divMacdSignal, setDivMacdSignal, divMacdMinDiff, setDivMacdMinDiff, divMacdComparePeriod, setDivMacdComparePeriod,
+    checkAndApplyPreset
+}) {
+    // Вспомогательная функция для обновления состояния и проверки пресета
+    const handleUpdate = (setter, moduleKey, v1, v2, v3, v4, v5, v6) => (e) => {
+        setter(e.target.value);
+        // Поскольку MACD многопараметрен, здесь сложнее отследить пресет.
+        // Оставим проверку только для основных RSI параметров.
+        if (moduleKey === 'div') {
+            checkAndApplyPreset('div', v1, v2); 
+        }
+    };
+    
+    // Вспомогательная функция для генерации полей ввода
+    const InputField = ({ label, value, setter, infoText, step = 1, min = 1, type = 'number', id, checked, isMacdParam = false }) => {
+        const onChange = (e) => {
+            setter(e.target.value);
+            // Если это не MACD-параметр, запускаем полную проверку пресета при изменении
+            // MACD-параметры не влияют на "стандартные" пресеты RSI
+            if (!isMacdParam) {
+                checkAndApplyPreset('div', divRsiPeriod, divRsiDiffMin);
+            }
+        };
+
+        const onCheckboxChange = (e) => {
+            setter(e.target.checked);
+        };
+
+        return (
+            <div>
+                <div className="th mb-1">
+                    {label}
+                    {infoText && <InfoTooltip text={infoText} />}
+                </div>
+                {type === 'checkbox' ? (
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={checked} onChange={onCheckboxChange} />
+                        {label}
+                    </label>
+                ) : (
+                    <input type={type} id={id} step={step} min={min}
+                           className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
+                           value={value}
+                           onChange={onChange} />
+                )}
+            </div>
+        );
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="label-heading">Настройки RSI и фильтры</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {/* 1. RSI Period */}
+                <InputField label="RSI период" value={divRsiPeriod} setter={setDivRsiPeriod} 
+                            infoText="Период для расчета RSI (например, 9 или 14)." min="5" max="30" />
+                
+                {/* 2. Min RSI Diff */}
+                <InputField label="Миним. разница RSI" value={divRsiDiffMin} setter={setDivRsiDiffMin} 
+                            infoText="Минимальная разница между RSI(сейчас) и RSI(T-свечей назад), необходимая для сигнала." min="1" max="15" />
+                
+                {/* 3. Max RSI Diff (ВАШЕ MAX_DI) */}
+                <InputField label="Макс. разница RSI (max_di)" value={divMaxRsiDiff} setter={setDivMaxRsiDiff} 
+                            infoText="Максимально допустимая разница RSI. Используется как фильтр для отсеивания слишком сильных движений (если разница > max_di, сигнал игнорируется)." min="5" max="50" />
+                
+                {/* 4. Compare Period (T) */}
+                <InputField label="Период сравнения (T)" value={divRsiPeriodCompare} setter={setDivRsiPeriodCompare} 
+                            infoText="Количество свечей назад, с которыми сравнивается текущий RSI и цена." min="2" max="30" />
+            </div>
+
+            <div className="h-px bg-[#1b1f2a]" />
+
+            <div className="label-heading">Настройки MACD (Дополнительный фильтр)</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {/* 5. Use MACD Checkbox */}
+                <div className="md:col-span-4">
+                    <InputField label="Использовать MACD-дивергенцию" type="checkbox" checked={divUseMacd} setter={setDivUseMacd} 
+                                infoText="Если включено, дивергенция будет проверяться как по RSI, так и по MACD. Сигнал сработает, если сработал хотя бы один." />
+                </div>
+            </div>
+
+            {divUseMacd && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 transition-all duration-300">
+                    {/* 6. MACD Fast */}
+                    <InputField label="MACD Fast" value={divMacdFast} setter={setDivMacdFast} isMacdParam={true} min="5" max="50" />
+                    
+                    {/* 7. MACD Slow */}
+                    <InputField label="MACD Slow" value={divMacdSlow} setter={setDivMacdSlow} isMacdParam={true} min="15" max="100" />
+                    
+                    {/* 8. MACD Signal (хотя в logic.js не используется, но для полноты) */}
+                    <InputField label="MACD Signal" value={divMacdSignal} setter={setDivMacdSignal} isMacdParam={true} min="5" max="20" />
+                    
+                    {/* 9. MACD Min Diff */}
+                    <InputField label="MACD Мин. разница" value={divMacdMinDiff} setter={setDivMacdMinDiff} isMacdParam={true} step="0.00001" min="0" 
+                                infoText="Минимальное изменение MACD линии, необходимое для регистрации дивергенции."/>
+                    
+                    {/* 10. MACD Compare Period */}
+                    <InputField label="MACD Период (T)" value={divMacdComparePeriod} setter={setDivMacdComparePeriod} isMacdParam={true} min="5" max="30" 
+                                infoText="Количество свечей назад, с которыми сравнивается MACD-линия."/>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ======================================
+// MAIN APP COMPONENT
+// ======================================
 
 function App(){
   const [running, setRunning] = useState(false);
@@ -152,10 +287,20 @@ function App(){
   const [pumpPreset, setPumpPreset] = useState('mid');
   const [pumpCustom, setPumpCustom] = useState({});
 
-  // Divergence
+  // Divergence - OLD
   const [divPreset, setDivPreset] = useState('mid');
   const [divRsiPeriod, setDivRsiPeriod] = useState(9);
   const [divRsiDiffMin, setDivRsiDiffMin] = useState(4);
+  
+  // Divergence - NEW MACD and MaxDiff STATES!
+  const [divMaxRsiDiff, setDivMaxRsiDiff] = useState(15);
+  const [divRsiPeriodCompare, setDivRsiPeriodCompare] = useState(5);
+  const [divUseMacd, setDivUseMacd] = useState(true);
+  const [divMacdFast, setDivMacdFast] = useState(12);
+  const [divMacdSlow, setDivMacdSlow] = useState(26);
+  const [divMacdSignal, setDivMacdSignal] = useState(9);
+  const [divMacdMinDiff, setDivMacdMinDiff] = useState(0.0001);
+  const [divMacdComparePeriod, setDivMacdComparePeriod] = useState(10);
   const [divCustom, setDivCustom] = useState({});
 
   // SmartPump settings
@@ -176,15 +321,15 @@ function App(){
   const [disbalanceCVDUsd, setDisbalanceCVDUsd] = useState(1000000);
   const [disbalanceCustom, setDisbalanceCustom] = useState({});
 
-  // BOS (NEW: Добавлен bosEmaPeriod)
+  // BOS
   const [bosPreset, setBosPreset] = useState('mid');
   const [bosPeriod, setBosPeriod] = useState(5);
   const [bosVolumeMult, setBosVolumeMult] = useState(2.0);
-  const [bosEmaPeriod, setBosEmaPeriod] = useState(20); // <-- NEW STATE
+  const [bosEmaPeriod, setBosEmaPeriod] = useState(20);
   const [bosCustom, setBosCustom] = useState({});
 
 
-  // Load/Save (логика сохранена)
+  // Load (Обновлено для загрузки всех новых настроек Div)
   useEffect(()=>{
     try{
       const s = JSON.parse(localStorage.getItem('komar_neon_div')||'{}');
@@ -204,6 +349,17 @@ function App(){
       if (s.divPreset) setDivPreset(s.divPreset);
       if (s.divRsiPeriod!=null) setDivRsiPeriod(s.divRsiPeriod);
       if (s.divRsiDiffMin!=null) setDivRsiDiffMin(s.divRsiDiffMin);
+      
+      // NEW DIV LOAD
+      if (s.divMaxRsiDiff!=null) setDivMaxRsiDiff(s.divMaxRsiDiff);
+      if (s.divRsiPeriodCompare!=null) setDivRsiPeriodCompare(s.divRsiPeriodCompare);
+      if (typeof s.divUseMacd==='boolean') setDivUseMacd(s.divUseMacd);
+      if (s.divMacdFast!=null) setDivMacdFast(s.divMacdFast);
+      if (s.divMacdSlow!=null) setDivMacdSlow(s.divMacdSlow);
+      if (s.divMacdSignal!=null) setDivMacdSignal(s.divMacdSignal);
+      if (s.divMacdMinDiff!=null) setDivMacdMinDiff(s.divMacdMinDiff);
+      if (s.divMacdComparePeriod!=null) setDivMacdComparePeriod(s.divMacdComparePeriod);
+
       if (s.divCustom) setDivCustom(s.divCustom);
       
       if (s.spPreset) setSpPreset(s.spPreset);
@@ -224,21 +380,25 @@ function App(){
       if (s.bosPreset) setBosPreset(s.bosPreset);
       if (s.bosPeriod!=null) setBosPeriod(s.bosPeriod);
       if (s.bosVolumeMult!=null) setBosVolumeMult(s.bosVolumeMult);
-      if (s.bosEmaPeriod!=null) setBosEmaPeriod(s.bosEmaPeriod); // <-- NEW LOAD
+      if (s.bosEmaPeriod!=null) setBosEmaPeriod(s.bosEmaPeriod);
       if (s.bosCustom) setBosCustom(s.bosCustom);
     }catch{}
   },[]);
 
-  // Save (логика сохранена)
+  // Save (Обновлено для сохранения всех новых настроек Div)
   useEffect(()=>{
     const s = {
       moduleTfs, minVol, useBinance, useBybit, activeModules, soundOn, cooldownSec,
       pumpMinOIPct, pumpMinCVDUsd, pumpPreset, pumpCustom, 
+      
       divPreset, divRsiPeriod, divRsiDiffMin, divCustom,
+      // NEW DIV SAVE
+      divMaxRsiDiff, divRsiPeriodCompare, divUseMacd, divMacdFast, divMacdSlow, divMacdSignal, divMacdMinDiff, divMacdComparePeriod,
+      
       spMinOIPct, spMinPricePct, spPreset, spCustom,
       flowPreset, flowOIPct, flowCVDUsd, flowCustom,
       disbalancePreset, disbalanceOIPct, disbalanceCVDUsd, disbalanceCustom,
-      bosPreset, bosPeriod, bosVolumeMult, bosEmaPeriod, // <-- NEW SAVE
+      bosPreset, bosPeriod, bosVolumeMult, bosEmaPeriod,
       bosCustom
     };
     localStorage.setItem('komar_neon_div', JSON.stringify(s));
@@ -246,23 +406,31 @@ function App(){
     moduleTfs, minVol, useBinance, useBybit, activeModules, soundOn, cooldownSec,
     pumpMinOIPct, pumpMinCVDUsd, pumpPreset, pumpCustom, 
     divPreset, divRsiPeriod, divRsiDiffMin, divCustom,
+    // NEW DIV DEPENDENCIES
+    divMaxRsiDiff, divRsiPeriodCompare, divUseMacd, divMacdFast, divMacdSlow, divMacdSignal, divMacdMinDiff, divMacdComparePeriod,
+    
     spMinOIPct, spMinPricePct, spPreset, spCustom,
     flowPreset, flowOIPct, flowCVDUsd, flowCustom,
     disbalancePreset, disbalanceOIPct, disbalanceCVDUsd, disbalanceCustom,
-    bosPreset, bosPeriod, bosVolumeMult, bosEmaPeriod, // <-- NEW DEPENDENCY
+    bosPreset, bosPeriod, bosVolumeMult, bosEmaPeriod,
     bosCustom
   ]);
 
-  // --- NEW: Check if current values match any standard preset (Обновлен BOS) ---
-  const checkAndApplyPreset = (moduleKey, v1, v2, v3) => {
+  // --- NEW: Check if current values match any standard preset ---
+  const checkAndApplyPreset = (moduleKey, v1, v2, v3, v4, v5, v6) => {
     let presets = [];
     let setters = [];
+    // ... (rest of the checkAndApplyPreset logic remains the same for other modules)
     if(moduleKey==='pump'){ presets=pumpPresets; setters=[setPumpPreset, setPumpMinOIPct, setPumpMinCVDUsd]; }
     else if(moduleKey==='smartpump'){ presets=spPresets; setters=[setSpPreset, setSpMinOIPct, setSpMinPricePct]; }
     else if(moduleKey==='flow'){ presets=flowPresets; setters=[setFlowPreset, setFlowOIPct, setFlowCVDUsd]; }
     else if(moduleKey==='disbalance'){ presets=disbalancePresets; setters=[setDisbalancePreset, setDisbalanceOIPct, setDisbalanceCVDUsd]; }
     else if(moduleKey==='bos'){ presets=bosPresets; setters=[setBosPreset, setBosPeriod, setBosVolumeMult, setBosEmaPeriod]; }
-    else if(moduleKey==='div'){ presets=divPresets; setters=[setDivPreset, setDivRsiPeriod, setDivRsiDiffMin]; }
+    else if(moduleKey==='div'){ 
+        presets=divPresets; 
+        // Примечание: Мы сравниваем только RSI Period и Min Diff, чтобы определить, это "custom" или стандартный пресет.
+        setters=[setDivPreset, setDivRsiPeriod, setDivRsiDiffMin]; 
+    }
 
     for(const p of presets){
       const vals = getPresetValues(moduleKey, p.name);
@@ -273,9 +441,9 @@ function App(){
       else if(moduleKey==='smartpump' && Number(v1) === vals.minOIPct && Number(v2) === vals.minPricePct){ match=true; }
       else if(moduleKey==='flow' && Number(v1) === vals.flowOIPct && Number(v2) === vals.flowCVDUsd){ match=true; }
       else if(moduleKey==='disbalance' && Number(v1) === vals.disbalanceOIPct && Number(v2) === vals.disbalanceCVDUsd){ match=true; }
-      // NEW BOS Check (v1=period, v2=volMult, v3=emaPeriod)
       else if(moduleKey==='bos' && Number(v1) === vals.bosPeriod && Number(v2) === vals.bosVolumeMult && Number(v3) === vals.bosEmaPeriod){ match=true; }
-      else if(moduleKey==='div' && Number(v1) === vals.divRsiPeriod && Number(v2) === vals.divRsiDiffMin){ match=true; }
+      // DIV Check: v1=rsiPeriod, v2=rsiDiffMin
+      else if(moduleKey==='div' && Number(v1) === vals.rsiPeriod && Number(v2) === vals.rsiDiffMin){ match=true; } 
       
       if(match){
         setters[0](p.name); // Set preset to standard name
@@ -286,12 +454,16 @@ function App(){
     return false;
   }
 
-  // Custom helpers (Обновлен BOS)
+  // Custom helpers (Обновлено для Divergence)
   const saveCustomSettings = (moduleKey) => {
     if (moduleKey === 'pump') {
       setPumpCustom({ pumpMinOIPct, pumpMinCVDUsd }); 
     } else if (moduleKey === 'div') {
-      setDivCustom({ divRsiPeriod, divRsiDiffMin }); 
+      // NEW DIV SAVE: Сохраняем все 8 параметров дивергенции в custom state
+      setDivCustom({ 
+        divRsiPeriod, divRsiDiffMin, divMaxRsiDiff, divRsiPeriodCompare,
+        divUseMacd, divMacdFast, divMacdSlow, divMacdSignal, divMacdMinDiff, divMacdComparePeriod
+      }); 
     } else if (moduleKey === 'smartpump') {
         setSpCustom({ spMinOIPct, spMinPricePct });
     } else if (moduleKey === 'flow') {
@@ -299,7 +471,6 @@ function App(){
     } else if (moduleKey === 'disbalance') {
       setDisbalanceCustom({ disbalanceOIPct, disbalanceCVDUsd });
     } else if (moduleKey === 'bos') {
-      // NEW: Сохраняем bosEmaPeriod
       setBosCustom({ bosPeriod, bosVolumeMult, bosEmaPeriod });
     }
   };
@@ -313,6 +484,17 @@ function App(){
       custom = divCustom;
       if(custom.divRsiPeriod!=null) setDivRsiPeriod(custom.divRsiPeriod);
       if(custom.divRsiDiffMin!=null) setDivRsiDiffMin(custom.divRsiDiffMin);
+      
+      // NEW DIV LOAD: Загружаем все 8 параметров
+      if(custom.divMaxRsiDiff!=null) setDivMaxRsiDiff(custom.divMaxRsiDiff);
+      if(custom.divRsiPeriodCompare!=null) setDivRsiPeriodCompare(custom.divRsiPeriodCompare);
+      if(typeof custom.divUseMacd==='boolean') setDivUseMacd(custom.divUseMacd);
+      if(custom.divMacdFast!=null) setDivMacdFast(custom.divMacdFast);
+      if(custom.divMacdSlow!=null) setDivMacdSlow(custom.divMacdSlow);
+      if(custom.divMacdSignal!=null) setDivMacdSignal(custom.divMacdSignal);
+      if(custom.divMacdMinDiff!=null) setDivMacdMinDiff(custom.divMacdMinDiff);
+      if(custom.divMacdComparePeriod!=null) setDivMacdComparePeriod(custom.divMacdComparePeriod);
+
     } else if (moduleKey === 'smartpump') {
       custom = spCustom;
       if(custom.spMinOIPct!=null) setSpMinOIPct(custom.spMinOIPct);
@@ -329,11 +511,11 @@ function App(){
       custom = bosCustom;
       if(custom.bosPeriod!=null) setBosPeriod(custom.bosPeriod);
       if(custom.bosVolumeMult!=null) setBosVolumeMult(custom.bosVolumeMult);
-      if(custom.bosEmaPeriod!=null) setBosEmaPeriod(custom.bosEmaPeriod); // NEW: Загружаем bosEmaPeriod
+      if(custom.bosEmaPeriod!=null) setBosEmaPeriod(custom.bosEmaPeriod);
     }
   };
 
-  // Presets (Обновлен BOS)
+  // Presets (Обновлено для Divergence)
   function applyPumpPreset(name){
     if (pumpPreset === name) return;
     if (pumpPreset === 'custom') saveCustomSettings('pump');
@@ -360,8 +542,17 @@ function App(){
     } else {
       const vals = getPresetValues('div', name);
       if(vals){
-        setDivRsiPeriod(vals.divRsiPeriod); 
-        setDivRsiDiffMin(vals.divRsiDiffMin);
+        setDivRsiPeriod(vals.rsiPeriod); 
+        setDivRsiDiffMin(vals.rsiDiffMin);
+        // NEW DIV APPLY: Применяем все параметры из пресета
+        setDivMaxRsiDiff(vals.maxRsiDiff);
+        setDivRsiPeriodCompare(vals.rsiPeriodCompare);
+        setDivUseMacd(vals.useMacd);
+        setDivMacdFast(vals.macdFast);
+        setDivMacdSlow(vals.macdSlow);
+        setDivMacdSignal(vals.macdSignal);
+        setDivMacdMinDiff(vals.macdMinDiff);
+        setDivMacdComparePeriod(vals.macdComparePeriod);
       }
     }
     setStatus(`✅ Пресет диверов: ${name}`);
@@ -426,14 +617,14 @@ function App(){
       if(vals){
         setBosPeriod(vals.bosPeriod);
         setBosVolumeMult(vals.bosVolumeMult);
-        setBosEmaPeriod(vals.bosEmaPeriod); // NEW: Устанавливаем период EMA из пресета
+        setBosEmaPeriod(vals.bosEmaPeriod);
       }
     }
     setStatus(`✅ Пресет BOS: ${name}`);
   }
 
 
-  // UI helpers (логика сохранена)
+  // UI helpers
   const toggleModule = (moduleName) => {
     setActiveModules(prev => ({ ...prev, [moduleName]: !prev[moduleName] }));
   };
@@ -442,19 +633,20 @@ function App(){
   };
   const isAnyModuleActive = Object.values(activeModules).some(Boolean);
 
-  // Callbacks (логика сохранена)
+  // Callbacks
   const onSignal = (sig)=>{
     setSignals(prev=>[sig, ...prev].slice(0,400));
     setHistory(prev=>[sig, ...prev].slice(0,50));
   };
   const onStatus = (msg)=> setStatus(`${nowTime()} — ${msg}`);
 
-  // Start/Stop (логика сохранена)
+  // Start/Stop (Обновлено для Divergence: передаем все 8 параметров в logic.js)
   const handleStart = ()=>{
     if (!isAnyModuleActive) {
       setStatus(`⛔️ Ошибка: Выберите хотя бы один модуль.`);
       return;
     }
+    // Save custom settings before starting
     if (pumpPreset === 'custom') saveCustomSettings('pump');
     if (divPreset === 'custom') saveCustomSettings('div');
     if (flowPreset === 'custom') saveCustomSettings('flow');
@@ -476,7 +668,7 @@ function App(){
     Settings.sensitivity.bos = {
       bosPeriod: Number(bosPeriod)||5,
       bosVolumeMult: Number(bosVolumeMult)||2.0,
-      bosEmaPeriod: Number(bosEmaPeriod)||20, // <-- NEW: Передаем EMA период
+      bosEmaPeriod: Number(bosEmaPeriod)||20,
       bosPreset
     };
 
@@ -484,20 +676,33 @@ function App(){
     Settings.sensitivity.pumpMinOIPct = Number(pumpMinOIPct)||0.05;
     Settings.sensitivity.pumpMinCVDUsd = Number(pumpMinCVDUsd)||500000;
 
+    // Divergence: PASS ALL 8 PARAMS
+    Settings.sensitivity.div = {
+        rsiPeriod: Number(divRsiPeriod)||9,
+        rsiDiffMin: Number(divRsiDiffMin)||4,
+        maxRsiDiff: Number(divMaxRsiDiff)||15, // NEW
+        rsiPeriodCompare: Number(divRsiPeriodCompare)||5, // NEW
+        useMacd: !!divUseMacd, // NEW
+        macdFast: Number(divMacdFast)||12, // NEW
+        macdSlow: Number(divMacdSlow)||26, // NEW
+        macdSignal: Number(divMacdSignal)||9, // NEW
+        macdMinDiff: Number(divMacdMinDiff)||0.0001, // NEW
+        macdComparePeriod: Number(divMacdComparePeriod)||10, // NEW
+    };
+
+
     // Global
     Settings.activeModules = activeModules;
     Settings.moduleTimeframes = moduleTfs;
     Settings.minVolumeM = Number(minVol)||50;
     Settings.exchanges = { binance: useBinance, bybit: useBybit };
     Settings.sensitivity = {
-      ...Settings.sensitivity,
-      div: {
-        rsiPeriod: Number(divRsiPeriod)||9,
-        rsiDiffMin: Number(divRsiDiffMin)||4,
-      },
+      ...Settings.sensitivity, // Keep other sensitivities
       sound: !!soundOn,
       cooldownSec: Number(cooldownSec)||1800,
     };
+    
+    // Note: Settings.sensitivity.div is already set above, no need to overwrite here
 
     if (typeof toggleSound === 'function') toggleSound(Settings.sensitivity.sound);
     setSignals([]);
@@ -545,6 +750,28 @@ function App(){
     </div>
   );
 
+  const renderDivergenceSettingsPanel = () => {
+    return (
+        <DivergenceSettingsPanel
+            // RSI
+            divRsiPeriod={divRsiPeriod} setDivRsiPeriod={setDivRsiPeriod}
+            divRsiDiffMin={divRsiDiffMin} setDivRsiDiffMin={setDivRsiDiffMin}
+            // Max Diff / Compare Period
+            divMaxRsiDiff={divMaxRsiDiff} setDivMaxRsiDiff={setDivMaxRsiDiff}
+            divRsiPeriodCompare={divRsiPeriodCompare} setDivRsiPeriodCompare={setDivRsiPeriodCompare}
+            // MACD
+            divUseMacd={divUseMacd} setDivUseMacd={setDivUseMacd}
+            divMacdFast={divMacdFast} setDivMacdFast={setDivMacdFast}
+            divMacdSlow={divMacdSlow} setDivMacdSlow={setDivMacdSlow}
+            divMacdSignal={divMacdSignal} setDivMacdSignal={setDivMacdSignal}
+            divMacdMinDiff={divMacdMinDiff} setDivMacdMinDiff={setDivMacdMinDiff}
+            divMacdComparePeriod={divMacdComparePeriod} setDivMacdComparePeriod={setDivMacdComparePeriod}
+            // Preset Check
+            checkAndApplyPreset={checkAndApplyPreset}
+        />
+    );
+  }
+
 
   return (
     <div className="space-y-4">
@@ -573,7 +800,7 @@ function App(){
               <div className="flex gap-2 flex-wrap">
                 <span className={`chip ${activeModules.divergence ? 'active' : ''}`} onClick={() => toggleModule('divergence')}>
                   📈 Дивергенции
-                  <InfoTooltip text="Ищет расхождение между ценой и индикатором RSI. Подтверждается нейтральным/противоположным потоком OI/CVD, что указывает на слабость текущего тренда." />
+                  <InfoTooltip text="Ищет расхождение между ценой и индикатором RSI/MACD. Подтверждается нейтральным или противоположным потоком OI/CVD, что указывает на слабость текущего тренда." />
                 </span>
                 <span className={`chip ${activeModules.pumpdump ? 'active' : ''}`} onClick={() => toggleModule('pumpdump')}>
                   🚀 Пампы/Дампы
@@ -623,7 +850,7 @@ function App(){
                 <InfoTooltip text="Минимальный объем торгов за последние 24 часа в млн USDT." />
               </div>
               <input type="number" min="1" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
-                     value={minVol} onChange={e=>setMinVol(e.target.value)} />
+                      value={minVol} onChange={e=>setMinVol(e.target.value)} />
             </div>
             <div className="col-span-2">
               <div className="th mb-1">Биржи</div>
@@ -646,13 +873,14 @@ function App(){
             <div className="th mb-2">Пресет для пампов/дампов (OI + CVD)</div>
             {renderPresetChips(pumpPreset, applyPumpPreset, pumpPresets)}
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <div className="th mb-1">
-                  Мин. OI % (абс. знач.)
-                  <InfoTooltip text="Минимальное изменение Open Interest (в %), требуемое для сигнала." />
-                </div>
-                <input type="number" step="0.01" min="0.00" 
+            {pumpPreset === 'custom' && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                <div>
+                  <div className="th mb-1">
+                    Мин. OI % (абс. знач.)
+                    <InfoTooltip text="Минимальное изменение Open Interest (в %), требуемое для сигнала." />
+                  </div>
+                  <input type="number" step="0.01" min="0.00" 
                       className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
                       value={pumpMinOIPct} 
                       onChange={e=>{
@@ -660,14 +888,14 @@ function App(){
                         setPumpMinOIPct(newVal); 
                         checkAndApplyPreset('pump', newVal, pumpMinCVDUsd);
                       }} />
-              </div>
-
-              <div>
-                <div className="th mb-1">
-                  Мин. CVD (USD)
-                  <InfoTooltip text="Минимальная кумулятивная дельта объёма в USD." />
                 </div>
-                <input type="number" step="10000" min="0" 
+
+                <div>
+                  <div className="th mb-1">
+                    Мин. CVD (USD)
+                    <InfoTooltip text="Минимальная кумулятивная дельта объёма в USD." />
+                  </div>
+                  <input type="number" step="10000" min="0" 
                       className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
                       value={pumpMinCVDUsd} 
                       onChange={e=>{
@@ -675,31 +903,32 @@ function App(){
                         setPumpMinCVDUsd(newVal);
                         checkAndApplyPreset('pump', pumpMinOIPct, newVal);
                       }} />
-              </div>
-              
-              <div className="md:col-span-1">
-                <div className="th mb-1">
-                  Антиспам (сек)
                 </div>
-                <input type="number" step="60" min="0"
-                  className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
-                  value={cooldownSec}
-                  onChange={e=>setCooldownSec(e.target.value)}
-                />
               </div>
-
-              <div className="flex items-center gap-4 md:col-span-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox"
-                    checked={soundOn}
-                    onChange={e=>{
-                      setSoundOn(e.target.checked);
-                      if (typeof toggleSound === 'function') toggleSound(e.target.checked);
-                    }}
-                  />
-                  Звук
-                </label>
-              </div>
+            )}
+            
+            {/* Global Settings for sound/cooldown - moved here for visual grouping */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                <div>
+                    <div className="th mb-1">Антиспам (сек)</div>
+                    <input type="number" step="60" min="0"
+                        className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
+                        value={cooldownSec}
+                        onChange={e=>setCooldownSec(e.target.value)}
+                    />
+                </div>
+                <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox"
+                            checked={soundOn}
+                            onChange={e=>{
+                                setSoundOn(e.target.checked);
+                                if (typeof toggleSound === 'function') toggleSound(e.target.checked);
+                            }}
+                        />
+                        Звук
+                    </label>
+                </div>
             </div>
           </div>
 
@@ -711,32 +940,34 @@ function App(){
             <div className="th mb-2">Пресет для SmartPump (OI + Δ%)</div>
             {renderPresetChips(spPreset, applySpPreset, spPresets)}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <div className="th mb-1">Мин. OI %</div>
-                <input type="number" step="0.01" min="0.00"
-                  className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
-                  value={spMinOIPct}
-                  onChange={e=>{ 
-                    const newVal = e.target.value;
-                    setSpMinOIPct(newVal); 
-                    checkAndApplyPreset('smartpump', newVal, spMinPricePct); 
-                  }}
-                />
-              </div>
-              <div>
-                <div className="th mb-1">Мин. Δ% цены</div>
-                <input type="number" step="0.01" min="0.00"
-                  className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
-                  value={spMinPricePct}
-                  onChange={e=>{ 
-                    const newVal = e.target.value;
-                    setSpMinPricePct(newVal); 
-                    checkAndApplyPreset('smartpump', spMinOIPct, newVal);
-                  }}
-                />
-              </div>
-            </div>
+            {spPreset === 'custom' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div>
+                        <div className="th mb-1">Мин. OI %</div>
+                        <input type="number" step="0.01" min="0.00"
+                            className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
+                            value={spMinOIPct}
+                            onChange={e=>{ 
+                            const newVal = e.target.value;
+                            setSpMinOIPct(newVal); 
+                            checkAndApplyPreset('smartpump', newVal, spMinPricePct); 
+                            }}
+                        />
+                    </div>
+                    <div>
+                        <div className="th mb-1">Мин. Δ% цены</div>
+                        <input type="number" step="0.01" min="0.00"
+                            className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
+                            value={spMinPricePct}
+                            onChange={e=>{ 
+                            const newVal = e.target.value;
+                            setSpMinPricePct(newVal); 
+                            checkAndApplyPreset('smartpump', spMinOIPct, newVal);
+                            }}
+                        />
+                    </div>
+                </div>
+            )}
           </div>
           
           <div className="h-px bg-[#1b1f2a]" />
@@ -745,32 +976,30 @@ function App(){
           <div>
             <div className="th mb-2">Пресет для Flow/Поток (OI + CVD)</div>
             {renderPresetChips(flowPreset, applyFlowPreset, flowPresets)}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <div className="th mb-1">
-                  Мин. OI % (абс. знач.)
+            {flowPreset === 'custom' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div>
+                        <div className="th mb-1">Мин. OI % (абс. знач.)</div>
+                        <input type="number" step="0.01" min="0.00" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
+                            value={flowOIPct} 
+                            onChange={e=>{
+                            const newVal = e.target.value;
+                            setFlowOIPct(newVal); 
+                            checkAndApplyPreset('flow', newVal, flowCVDUsd);
+                            }} />
+                    </div>
+                    <div>
+                        <div className="th mb-1">Мин. CVD (USD)</div>
+                        <input type="number" step="10000" min="0" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
+                            value={flowCVDUsd} 
+                            onChange={e=>{
+                            const newVal = e.target.value;
+                            setFlowCVDUsd(newVal);
+                            checkAndApplyPreset('flow', flowOIPct, newVal);
+                            }} />
+                    </div>
                 </div>
-                <input type="number" step="0.01" min="0.00" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
-                       value={flowOIPct} 
-                       onChange={e=>{
-                        const newVal = e.target.value;
-                        setFlowOIPct(newVal); 
-                        checkAndApplyPreset('flow', newVal, flowCVDUsd);
-                      }} />
-              </div>
-              <div>
-                <div className="th mb-1">
-                  Мин. CVD (USD)
-                </div>
-                <input type="number" step="10000" min="0" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
-                       value={flowCVDUsd} 
-                       onChange={e=>{
-                        const newVal = e.target.value;
-                        setFlowCVDUsd(newVal);
-                        checkAndApplyPreset('flow', flowOIPct, newVal);
-                      }} />
-              </div>
-            </div>
+            )}
           </div>
 
           <div className="h-px bg-[#1b1f2a]" />
@@ -779,114 +1008,81 @@ function App(){
           <div>
             <div className="th mb-2">Пресет для Дисбаланса (OI + CVD)</div>
             {renderPresetChips(disbalancePreset, applyDisbalancePreset, disbalancePresets)}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <div className="th mb-1">
-                  Мин. OI % (абс. знач.)
+            {disbalancePreset === 'custom' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div>
+                        <div className="th mb-1">Мин. OI % (абс. знач.)</div>
+                        <input type="number" step="0.01" min="0.00" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
+                            value={disbalanceOIPct} 
+                            onChange={e=>{
+                            const newVal = e.target.value;
+                            setDisbalanceOIPct(newVal); 
+                            checkAndApplyPreset('disbalance', newVal, disbalanceCVDUsd);
+                            }} />
+                    </div>
+                    <div>
+                        <div className="th mb-1">Мин. CVD (USD)</div>
+                        <input type="number" step="10000" min="0" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
+                            value={disbalanceCVDUsd} 
+                            onChange={e=>{
+                            const newVal = e.target.value;
+                            setDisbalanceCVDUsd(newVal);
+                            checkAndApplyPreset('disbalance', disbalanceOIPct, newVal);
+                            }} />
+                    </div>
                 </div>
-                <input type="number" step="0.01" min="0.00" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
-                       value={disbalanceOIPct} 
-                       onChange={e=>{
-                        const newVal = e.target.value;
-                        setDisbalanceOIPct(newVal); 
-                        checkAndApplyPreset('disbalance', newVal, disbalanceCVDUsd);
-                      }} />
-              </div>
-              <div>
-                <div className="th mb-1">
-                  Мин. CVD (USD)
-                </div>
-                <input type="number" step="10000" min="0" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
-                       value={disbalanceCVDUsd} 
-                       onChange={e=>{
-                        const newVal = e.target.value;
-                        setDisbalanceCVDUsd(newVal);
-                        checkAndApplyPreset('disbalance', disbalanceOIPct, newVal);
-                      }} />
-              </div>
-            </div>
+            )}
           </div>
 
           <div className="h-px bg-[#1b1f2a]" />
 
-          {/* BOS (NEW: Добавлена настройка EMA) */}
+          {/* BOS (Break of Structure) */}
           <div>
             <div className="th mb-2">Пресет для BOS (Пробой Структуры)</div>
             {renderPresetChips(bosPreset, applyBosPreset, bosPresets)}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <div className="th mb-1">
-                  Период BOS (свечей)
+            {bosPreset === 'custom' && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                    <div>
+                        <div className="th mb-1">Период BOS (свечей)</div>
+                        <input type="number" step="1" min="2" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
+                            value={bosPeriod} 
+                            onChange={e=>{
+                            const newVal = e.target.value;
+                            setBosPeriod(newVal); 
+                            checkAndApplyPreset('bos', newVal, bosVolumeMult, bosEmaPeriod);
+                            }} />
+                    </div>
+                    <div>
+                        <div className="th mb-1">× Объёма (к SMA20)</div>
+                        <input type="number" step="0.1" min="1.0" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
+                            value={bosVolumeMult} 
+                            onChange={e=>{
+                            const newVal = e.target.value;
+                            setBosVolumeMult(newVal);
+                            checkAndApplyPreset('bos', bosPeriod, newVal, bosEmaPeriod);
+                            }} />
+                    </div>
+                    <div>
+                        <div className="th mb-1">Период EMA (N)</div>
+                        <input type="number" step="1" min="5" max="200" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
+                            value={bosEmaPeriod} 
+                            onChange={e=>{
+                            const newVal = e.target.value;
+                            setBosEmaPeriod(newVal);
+                            checkAndApplyPreset('bos', bosPeriod, bosVolumeMult, newVal);
+                            }} />
+                    </div>
                 </div>
-                <input type="number" step="1" min="2" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
-                       value={bosPeriod} 
-                       onChange={e=>{
-                        const newVal = e.target.value;
-                        setBosPeriod(newVal); 
-                        checkAndApplyPreset('bos', newVal, bosVolumeMult, bosEmaPeriod);
-                      }} />
-              </div>
-              <div>
-                <div className="th mb-1">
-                  × Объёма (к SMA20)
-                </div>
-                <input type="number" step="0.1" min="1.0" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
-                       value={bosVolumeMult} 
-                       onChange={e=>{
-                        const newVal = e.target.value;
-                        setBosVolumeMult(newVal);
-                        checkAndApplyPreset('bos', bosPeriod, newVal, bosEmaPeriod);
-                      }} />
-              </div>
-              {/* NEW: Поле для настройки периода EMA */}
-              <div>
-                <div className="th mb-1">
-                  Период EMA (N)
-                  <InfoTooltip text="EMA-фильтр для подтверждения тренда (цена должна быть выше/ниже EMA)." />
-                </div>
-                <input type="number" step="1" min="5" max="200" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
-                       value={bosEmaPeriod} 
-                       onChange={e=>{
-                        const newVal = e.target.value;
-                        setBosEmaPeriod(newVal);
-                        checkAndApplyPreset('bos', bosPeriod, bosVolumeMult, newVal);
-                      }} />
-              </div>
-            </div>
+            )}
           </div>
 
           <div className="h-px bg-[#1b1f2a]" />
 
-          {/* DIVERGENCE */}
+          {/* DIVERGENCE (NEW PANEL) */}
           <div>
-            <div className="th mb-2">Пресет для диверов</div>
+            <div className="th mb-2">Пресет для диверов (RSI + MACD)</div>
             {renderPresetChips(divPreset, applyDivPreset, divPresets)}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <div className="th mb-1">
-                  RSI период
-                </div>
-                <input type="number" min="5" max="21" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
-                       value={divRsiPeriod} 
-                       onChange={e=>{
-                        const newVal = e.target.value;
-                        setDivRsiPeriod(newVal); 
-                        checkAndApplyPreset('div', newVal, divRsiDiffMin);
-                      }} />
-              </div>
-              <div>
-                <div className="th mb-1">
-                  Миним. разница RSI
-                </div>
-                <input type="number" step="1" min="1" className="w-full bg-[#0E1115] border border-[#1b1f2a] rounded-lg px-3 py-2"
-                       value={divRsiDiffMin} 
-                       onChange={e=>{
-                        const newVal = e.target.value;
-                        setDivRsiDiffMin(newVal);
-                        checkAndApplyPreset('div', divRsiPeriod, newVal);
-                      }} />
-              </div>
-            </div>
+            {divPreset === 'custom' && renderDivergenceSettingsPanel()}
           </div>
 
         </div>
@@ -902,25 +1098,29 @@ function App(){
               const isDiv = s.reason?.startsWith?.('Дивергенция');
               const isSmartPump = s.reason?.startsWith?.('Smart Pump') || s.kind?.startsWith?.('⚡ Smart Pump'); 
               const isPumpDump = s.kind?.startsWith?.('PUMP') || s.kind?.startsWith?.('DUMP'); 
-              const isBOS = s.kind?.includes?.('BOS'); // <-- NEW: Проверка на BOS
-              
+              const isBOS = s.kind?.includes?.('BOS');
+               
               const smartPumpCount = s.detail?.smartPumpCount24h ?? null; 
-              
-              const volStr = s.detail?.volMult!=null ? `Vol×${fmt(s.detail.volMult,2)}` : '';
-              const rsiStr = s.detail?.rNow!=null ? `RSI: ${fmt(s.detail.rNow,0)}` : ''; 
-              
+               
+              const volStr = s.detail?.volMult!=null ? `Vol×${fmt(s.detail.volMult,2)}` : ''; 
+              // NEW: Если это дивергенция, пытаемся показать RSI или MACD детали
+              const rsiStr = isDiv && s.detail?.reasons?.includes('RSI') ? 
+                  `RSI: ${fmt(s.detail?.rNow,0)} (Δ ${fmt(s.detail?.rsiDelta,1)})` : null; 
+              const macdStr = isDiv && s.detail?.reasons?.includes('MACD') ? 
+                  `MACD Δ: ${fmt(s.detail?.macdDelta, 4)}` : null;
+               
               const oiVal  = s.detail?.oi  ?? s.detail?.oiPct  ?? null;
               const cvdVal = s.detail?.cvd ?? s.detail?.cvdUsd ?? null;
               const priceChangePct = s.detail?.priceChangePct ?? null;
-              
-              const emaVal = s.detail?.ema ?? null; // <-- NEW: Значение EMA
-              const emaPeriod = s.detail?.emaPeriod ?? null; // <-- NEW: Период EMA
-              
+               
+              const emaVal = s.detail?.ema ?? null;
+              const emaPeriod = s.detail?.emaPeriod ?? null;
+               
               // Расчет OI в USD
               const oiUsd = (oiVal != null && s.price != null && s.detail?.oiUsd!=null) 
                 ? s.detail.oiUsd
                 : (oiVal != null && s.price != null) ? Math.abs(Number(oiVal))/100 * Number(s.price) * 1_000_000 : null; 
-     
+      
               const formatUsd = (usd) => {
                   if (usd == null) return '';
                   return (usd >= 1_000_000)
@@ -961,15 +1161,16 @@ function App(){
               ) : null;
 
 
-              // NEW METRIC ORDER: Price Change > OI > CVD/EMA > SP Count > Vol > RSI
+              // NEW METRIC ORDER: Price Change > OI > CVD/EMA > SP Count > Vol > RSI/MACD
               const metricElements = [
                 priceChangeElement,
                 oiElement, 
                 // Условное отображение CVD или EMA
-                isBOS ? emaElement : cvdElement, // <-- NEW: BOS показывает EMA
+                isBOS ? emaElement : cvdElement,
                 spCountElement, 
-                (isBOS || isDiv) ? volStr : null, // BOS/DIV всегда показывают объем
-                (isDiv ? rsiStr : null),
+                (isBOS || isDiv) ? volStr : null,
+                rsiStr, // NEW
+                macdStr, // NEW
               ].filter(Boolean);
 
 
@@ -1062,4 +1263,5 @@ function App(){
   );
 }
 
+// Убедитесь, что div с id 'root' существует в вашем HTML
 ReactDOM.render(<App/>, document.getElementById('root'));
