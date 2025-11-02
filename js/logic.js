@@ -1,4 +1,32 @@
-// ===== KOMAR — Logic Engine (ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ: BOS с EMA + Divergence с MACD/MaxDiff) =====
+// ===== KOMAR — Logic Engine (ФИНАЛЬНАЯ ВЕРСИЯ: BOS с EMA + Divergence с MACD/MaxDiff + Presets) =====
+
+// --- ГЛОБАЛЬНЫЕ ПРЕСЕТЫ ДЛЯ ДИВЕРГЕНЦИИ ---
+const divPresets = {
+    // Пресет "Ранний дивер" (Bullish/Bearish): Быстрый RSI, низкая мин. разница
+    'Ранний дивер': {
+        rsiPeriod: 9, 
+        rsiDiffMin: 3, 
+        maxRsiDiff: 15,
+        rsiPeriodCompare: 5,
+        useMacd: false // MACD отключен для быстрых/ранних сигналов
+    },
+    // Пресет "Средний дивер": Баланс между скоростью и надежностью
+    'Средний дивер': {
+        rsiPeriod: 14, 
+        rsiDiffMin: 5, 
+        maxRsiDiff: 20,
+        rsiPeriodCompare: 10,
+        useMacd: true 
+    },
+    // Пресет "Настоящий дивер": Медленный RSI, высокая мин. разница, высокая надежность
+    'Настоящий дивер': {
+        rsiPeriod: 21, 
+        rsiDiffMin: 8, 
+        maxRsiDiff: 30, // Выше max_di, чтобы пропустить экстремально сильные движения
+        rsiPeriodCompare: 15,
+        useMacd: true 
+    }
+};
 
 // ---- НАСТРОЙКИ ----
 const Settings = {
@@ -34,19 +62,21 @@ const Settings = {
 
     // Divergence
     div: {
-      rsiPeriod:9,
-      rsiDiffMin:4,
-      maxRsiDiff: 15,     // <--- НОВАЯ: Максимальная разница RSI (аналог max_di)
-      rsiPeriodCompare: 5, // <--- НОВАЯ: Период сравнения RSI
+      divergencePreset: 'Свои настройки', // <--- НОВОЕ: Текущий активный пресет
+      
+      // Настройки RSI (по умолчанию для "Свои настройки")
+      rsiPeriod: 16,
+      rsiDiffMin: 8,
+      maxRsiDiff: 15,    
+      rsiPeriodCompare: 5,
 
-      // === НОВЫЕ НАСТРОЙКИ MACD ===
-      useMacd: true,      // Включить проверку MACD (true/false)
+      // Настройки MACD
+      useMacd: true,
       macdFast: 12,
       macdSlow: 26,
       macdSignal: 9,
-      macdDiffMin: 0.0001, // Минимальная разница MACD
-      macdComparePeriod: 10 // Период сравнения MACD
-      // =============================
+      macdDiffMin: 0.0001,
+      macdComparePeriod: 10
     },
 
     flow:{
@@ -72,6 +102,29 @@ const Settings = {
     cooldownSec:1800
   }
 };
+
+// ---- ФУНКЦИЯ ДЛЯ УСТАНОВКИ НАСТРОЕК ДИВЕРГЕНЦИИ ЧЕРЕЗ ИНТЕРФЕЙС ----
+// Вызовите эту функцию из вашего кода интерфейса при клике на пресет или кнопку "Применить"
+function setDivergenceSettings(type, customConfig = {}) {
+    if (type === 'Свои настройки' && Object.keys(customConfig).length > 0) {
+        // Применяем пользовательские настройки
+        Object.assign(Settings.sensitivity.div, customConfig);
+        Settings.sensitivity.div.divergencePreset = 'Свои настройки';
+    } else if (divPresets[type]) {
+        // Применяем настройки пресета
+        Object.assign(Settings.sensitivity.div, divPresets[type]);
+        // MACD-настройки не включены в Presets по умолчанию, добавляем их, если не заданы
+        Settings.sensitivity.div.macdFast = Settings.sensitivity.div.macdFast || 12; 
+        Settings.sensitivity.div.macdSlow = Settings.sensitivity.div.macdSlow || 26; 
+        Settings.sensitivity.div.macdSignal = Settings.sensitivity.div.macdSignal || 9; 
+        Settings.sensitivity.div.macdDiffMin = Settings.sensitivity.div.macdDiffMin || 0.0001; 
+        Settings.sensitivity.div.macdComparePeriod = Settings.sensitivity.div.macdComparePeriod || 10;
+        Settings.sensitivity.div.divergencePreset = type;
+    } else {
+        console.error(`Неизвестный тип настроек дивергенции: ${type}`);
+    }
+}
+
 
 // ---- Глобал ----
 let _intervalId=null, _running=false;
@@ -174,21 +227,20 @@ function analyzeDisbalanceSmart(kl, oiVal, cvdVal){
 
 function analyzeBOSSmart(kl, oiVal, cvdVal){
   // --- НОВЫЕ ПАРАМЕТРЫ ---
-  const MIN_OI_BOS = 0.01;      // Мин. % изменения OI для подтверждения
-  const BOS_EMA_PERIOD = Settings.sensitivity.bos.bosEmaPeriod || 20; // NEW: Берем из настроек
+  const MIN_OI_BOS = 0.01;
+  const BOS_EMA_PERIOD = Settings.sensitivity.bos.bosEmaPeriod || 20;
   // -----------------------
   
   if (oiVal == null) return null; 
   const period = Settings.sensitivity.bos.bosPeriod||15;
   const volReq = Settings.sensitivity.bos.bosVolumeMult||3;
-  if(!kl || kl.length<period+BOS_EMA_PERIOD) return null; // Увеличиваем требование к длине данных
+  if(!kl || kl.length<period+BOS_EMA_PERIOD) return null;
 
   const idx = lastClosedIndex(kl);
   const close = Number(kl[idx][4]);
   
   // 1. Расчет EMA
   const cls = closes(kl);
-  // Используем closes(kl) для расчета EMA
   const emaValue = ema(cls, BOS_EMA_PERIOD);
   if (emaValue == null) return null; 
 
@@ -206,14 +258,14 @@ function analyzeBOSSmart(kl, oiVal, cvdVal){
   const vLast = vols[idx];
   const volMult = vLast / (vAvg || 1);
   
-  if(vLast < vAvg * volReq) return null; // Нет аномального объема
+  if(vLast < vAvg * volReq) return null;
 
   let side = null, scoreClass = 's1';
 
   // --- ЛОГИКА BOS (Лонг: Пробой High) ---
   if(close > bosHigh){
     const isOiConfirmed = oiVal >= MIN_OI_BOS;
-    const isEmaConfirmed = close > emaValue; // NEW: Цена выше EMA
+    const isEmaConfirmed = close > emaValue;
     
     if(isOiConfirmed && isEmaConfirmed){
       side = 'Лонг'; scoreClass = 's3';
@@ -227,7 +279,7 @@ function analyzeBOSSmart(kl, oiVal, cvdVal){
   // --- ЛОГИКА BOS (Шорт: Пробой Low) ---
   else if(close < bosLow){
     const isOiConfirmed = oiVal <= -MIN_OI_BOS;
-    const isEmaConfirmed = close < emaValue; // NEW: Цена ниже EMA
+    const isEmaConfirmed = close < emaValue;
 
     if(isOiConfirmed && isEmaConfirmed){
       side = 'Шорт'; scoreClass = 's3';
@@ -245,8 +297,8 @@ function analyzeBOSSmart(kl, oiVal, cvdVal){
       price: close,
       detail: {
         oi: oiVal,
-        ema: emaValue, // NEW: Добавляем EMA
-        emaPeriod: BOS_EMA_PERIOD, // NEW: Добавляем период EMA
+        ema: emaValue,
+        emaPeriod: BOS_EMA_PERIOD,
         bosPeriod: period,
         volMult: volMult,
         scoreClass: scoreClass
@@ -286,7 +338,6 @@ function analyzeDivergenceSmart(kl, oiVal, cvdVal){
   const cfg = Settings.sensitivity.div;
   const priceNow = +kl[idx][4];
 
-  // Переменная для сбора сигналов
   let divSignal = { side: null, reasons: [] };
 
   // ===================================
@@ -295,7 +346,7 @@ function analyzeDivergenceSmart(kl, oiVal, cvdVal){
   if (cfg.rsiPeriod && cfg.rsiPeriodCompare) {
     const rsiPeriod = cfg.rsiPeriod || 9;
     const minDiff   = cfg.rsiDiffMin || 4;
-    const maxDiff   = cfg.maxRsiDiff || 15; // <-- ИСПОЛЬЗУЕМ maxRsiDiff (max_di)
+    const maxDiff   = cfg.maxRsiDiff || 15; 
     const comparePeriod = cfg.rsiPeriodCompare || 5;
 
     if(idx >= comparePeriod) {
@@ -307,7 +358,7 @@ function analyzeDivergenceSmart(kl, oiVal, cvdVal){
         const rsiDelta = rNow - rPrev;
         const absRsiDelta = Math.abs(rsiDelta);
 
-        if(absRsiDelta <= maxDiff && absRsiDelta > minDiff) { // <-- Проверка maxRsiDiff
+        if(absRsiDelta <= maxDiff && absRsiDelta > minDiff) { 
           // Bullish (Лонг): Цена упала И RSI вырос
           if(priceNow < pricePrev && rsiDelta > 0){ 
             if (divSignal.side === 'Шорт') return null; 
@@ -398,7 +449,7 @@ function analyzeDivergenceSmart(kl, oiVal, cvdVal){
     reason,
     price:priceNow,
     detail:{
-      reasons: divSignal.reasons.join(', '), // Причины: RSI, MACD или оба
+      reasons: divSignal.reasons.join(', '),
       oi:oiVal,
       cvd:cvdVal,
       volMult,
