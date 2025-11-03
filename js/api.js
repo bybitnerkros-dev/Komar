@@ -5,7 +5,7 @@
 const API = {
   // --- 24hr Tickers ---
   async binance24h(){
-    const url = 'https://fapi.binance.com/fapi/v1/ticker/24hr';
+    const url = '/api/binance/fapi/v1/ticker/24hr';
     const res = await fetch(url);
     if(!res.ok) throw new Error('Binance 24hr fetch failed');
     return await res.json();
@@ -21,7 +21,7 @@ const API = {
   
   // --- Klines ---
   async binanceKlines(symbol, interval='15m', limit=120){
-    const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+    const url = `/api/binance/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
     const res = await fetch(url);
     if(!res.ok) throw new Error('Binance klines failed: '+symbol);
     return await res.json();
@@ -54,7 +54,7 @@ const API = {
       }
 
       // Binance OI endpoint использует период (например, 5m)
-      const url = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=${tfMinStr}&limit=30`;
+      const url = `/api/binance/futures/data/openInterestHist?symbol=${symbol}&period=${tfMinStr}&limit=30`;
       const r = await fetch(url);
       const list = await r.json();
       if (list.length < 2) return { oiPct: null };
@@ -82,7 +82,7 @@ const API = {
         const data = await r.json();
         list = data?.result?.list || [];
       } else {
-        const url = `https://fapi.binance.com/fapi/v1/trades?symbol=${symbol}&limit=1000`;
+        const url = `/api/binance/fapi/v1/trades?symbol=${symbol}&limit=1000`;
         const r = await fetch(url);
         list = await r.json();
       }
