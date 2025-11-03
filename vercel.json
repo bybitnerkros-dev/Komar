@@ -5,13 +5,5 @@
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1.js" }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store" }
-      ]
-    }
   ]
 }
